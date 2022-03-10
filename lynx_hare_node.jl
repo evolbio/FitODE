@@ -7,6 +7,8 @@ use_splines = true
 # points per year
 pts = if use_splines 2 else 1 end
  
+df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
+					DataFrame);
 ode_data = permutedims(Array{Float32}(df[:,2:3]));
 
 # take log and then normalize by average
@@ -35,15 +37,35 @@ dudt2 = FastChain(FastDense(n, 50, tanh), FastDense(50, n))
 #prob_neuralode = NeuralODE(dudt2, tspan, Tsit5(), saveat = tsteps)
 
 # Array of predictions from NeuralODE with parameters p starting at initial condition u0
-function predict_neuralode(p)
-  Array(prob_neuralode(u0, p))
+function predict_neuralode(p, prob)
+  Array(prob(u0, p))
 end
 
-function loss_neuralode(p, i)
-	pred = predict_neuralode(p)[1:2,:] # First two rows are lynx & hare, others are dummies
-	loss = sum(abs2, ode_data[:,1:length(pred[1,:])] .- pred) # Sum of squared error
+function loss_neuralode(p, i, prob, incr)
+	pred = predict_neuralode(p,prob)[1:2,:] # First rows  hare & lynx, others are dummies
+	pred_length = length(pred[1,:])
+	incr_steps = Int(incr*pts)
+	old_length = pred_length-incr_steps
+	pred_old = @view pred[:,1:old_length]
+	pred_new = @view pred[:,1+old_length:pred_length]
+	data_old = @view ode_data[:,1:old_length]
+	data_new = @view ode_data[:,1+old_length:pred_length]
+	loss_old = sum(abs2, data_old .- pred_old)
+	loss_new = sum(abs2, data_new .- pred_new)
+	loss = 10.0 * loss_old + loss_new
 	return loss, pred, i
 end
+
+
+# function loss_neuralode(p, i, prob, incr)
+# 	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
+# 	# bigger exponent gives steeper dropoff at end
+# 	pred_length = length(pred[1,:])
+# 	w = [0.01 + 1-(x/pred_length)^3 for x = 1:pred_length]'
+# 	weight = vcat(w,w)
+# 	loss = sum(abs2, weight .* (ode_data[:,1:pred_length] .- pred))
+# 	return loss, pred, i
+# end
 
 callback = function (p, l, pred, i; doplot = true)
   display(l)
@@ -64,11 +86,12 @@ end
 #i = 30
 #result = DiffEqFlux.sciml_train(p -> loss_neuralode(p,i), prob_neuralode.p, cb = callback)
 
-incr = 3.0
+incr = 30.0
 for i in incr:incr:90.0
+	global result
 	println(i)
-	prob_neuralode = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
-	p = if (i == incr) prob_neuralode.p else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss_neuralode(p,i), prob_neuralode.p, ADAM(0.02);
-					cb = callback, maxiters=300)
+	prob = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
+	p = if (i == incr) prob.p else result.u end
+	result = DiffEqFlux.sciml_train(p -> loss_neuralode(p,i,prob,incr), p,
+					ADAM(0.02); cb = callback, maxiters=300)
 end
