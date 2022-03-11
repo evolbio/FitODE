@@ -1,5 +1,5 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
-		Statistics
+		Statistics, Distributions
 
 # number of variables to track in ODE, first two are hare and lynx
 n = 10 # must be >= 2
@@ -41,32 +41,6 @@ function predict_neuralode(p, prob)
   Array(prob(u0, p))
 end
 
-function loss_neuralode(p, i, prob, incr)
-	pred = predict_neuralode(p,prob)[1:2,:] # First rows  hare & lynx, others are dummies
-	pred_length = length(pred[1,:])
-	incr_steps = Int(incr*pts)
-	old_length = pred_length-incr_steps
-	pred_old = @view pred[:,1:old_length]
-	pred_new = @view pred[:,1+old_length:pred_length]
-	data_old = @view ode_data[:,1:old_length]
-	data_new = @view ode_data[:,1+old_length:pred_length]
-	loss_old = sum(abs2, data_old .- pred_old)
-	loss_new = sum(abs2, data_new .- pred_new)
-	loss = 10.0 * loss_old + loss_new
-	return loss, pred, i
-end
-
-
-# function loss_neuralode(p, i, prob, incr)
-# 	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
-# 	# bigger exponent gives steeper dropoff at end
-# 	pred_length = length(pred[1,:])
-# 	w = [0.01 + 1-(x/pred_length)^3 for x = 1:pred_length]'
-# 	weight = vcat(w,w)
-# 	loss = sum(abs2, weight .* (ode_data[:,1:pred_length] .- pred))
-# 	return loss, pred, i
-# end
-
 callback = function (p, l, pred, i; doplot = true)
   display(l)
   # plot current prediction against data
@@ -82,9 +56,34 @@ callback = function (p, l, pred, i; doplot = true)
   return false
 end
 
+function loss(p, i, prob, incr)
+	pred = predict_neuralode(p,prob)[1:2,:] # First rows  hare & lynx, others are dummies
+	pred_length = length(pred[1,:])
+	incr_steps = Int(incr*pts)
+	old_length = pred_length-incr_steps
+	pred_old = @view pred[:,1:old_length]
+	pred_new = @view pred[:,1+old_length:pred_length]
+	data_old = @view ode_data[:,1:old_length]
+	data_new = @view ode_data[:,1+old_length:pred_length]
+	loss_old = sum(abs2, data_old .- pred_old)
+	loss_new = sum(abs2, data_new .- pred_new)
+	loss = 10.0 * loss_old + loss_new
+	return loss, pred, i
+end
+
+# function loss(p, i, prob, incr)
+# 	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
+# 	# bigger exponent gives steeper dropoff at end
+# 	pred_length = length(pred[1,:])
+# 	w = [0.01 + 1-(x/pred_length)^3 for x = 1:pred_length]'
+# 	weight = vcat(w,w)
+# 	loss = sum(abs2, weight .* (ode_data[:,1:pred_length] .- pred))
+# 	return loss, pred, i
+# end
+
 # Input parameters are prob_neuralode.p, return parameters in result.u
 #i = 30
-#result = DiffEqFlux.sciml_train(p -> loss_neuralode(p,i), prob_neuralode.p, cb = callback)
+#result = DiffEqFlux.sciml_train(p -> loss(p,i), prob_neuralode.p, cb = callback)
 
 incr = 30.0
 for i in incr:incr:90.0
@@ -92,6 +91,21 @@ for i in incr:incr:90.0
 	println(i)
 	prob = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
 	p = if (i == incr) prob.p else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss_neuralode(p,i,prob,incr), p,
+	result = DiffEqFlux.sciml_train(p -> loss(p,i,prob,incr), p,
+					ADAM(0.02); cb = callback, maxiters=300)
+end
+
+function weights(a, b=10, trunc=1e-4) 
+	w = [1 - cdf(Beta(a,b),x) for x = tsteps]
+	v = w[w .> trunc]'
+	vcat(v,v)
+end
+
+for i in incr:incr:90.0
+	global result
+	println(i)
+	prob = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
+	p = if (i == incr) prob.p else result.u end
+	result = DiffEqFlux.sciml_train(p -> loss(p,i,prob,incr), p,
 					ADAM(0.02); cb = callback, maxiters=300)
 end
