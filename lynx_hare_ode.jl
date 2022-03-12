@@ -3,7 +3,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames, 
 use_splines = true
 
 # number of variables to track in ODE, first two are hare and lynx
-n = 5 # must be >= 2
+n = 3 # must be >= 2
 nsqr = n*n
 # n^2 matrix for pairwise interactions plus vector n for individual growth
 p = 0.1*rand(nsqr + n);
@@ -33,11 +33,12 @@ u0 = vcat(u0,randn(Float32,n-2))
 
 swish(x) = x ./ (exp.(-x) .+ 1.0)
 sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
+tanhh(x) = (exp(2x)-1)/(exp(2x)+1)
 
 # input vector length S
 function ode!(du, u, p, t)
 	w = reshape(p[1:nsqr], n, n)
-	du .= sigmoid(w*u .- p[nsqr+1:end])
+	du .= tanh.(w*u .- p[nsqr+1:end])
 	#du .= swish(w*u .- p[nsqr+1:end])
 	#du .= swish(w*u) .- p[nsqr+1:end]
 end
@@ -72,7 +73,7 @@ for i in 3.0:3.0:90.0
 	println(i)
 	#display(p)
 	prob = ODEProblem(ode!, u0, (0.0,i), p)
-	result = DiffEqFlux.sciml_train(p -> loss(p, i, prob), p, ADAM(0.02),
+	result = DiffEqFlux.sciml_train(p -> loss(p, i, prob), p, ADAM(0.0002),
 		cb = callback, maxiters = 1000, abstol=1e-4, reltol=1e-2)
 	p = result.u
 end
