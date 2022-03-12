@@ -2,7 +2,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions
 
 # number of variables to track in ODE, first two are hare and lynx
-n = 10 # must be >= 2
+n = 4 # must be >= 2
 use_splines = true
 # points per year
 pts = if use_splines 2 else 1 end
@@ -41,14 +41,15 @@ function predict_neuralode(p, prob)
   Array(prob(u0, p))
 end
 
-callback = function (p, l, pred, i; doplot = true)
+callback = function (p, l, pred; doplot = true)
   display(l)
   # plot current prediction against data
-  ts = tsteps[tsteps .<= i]
+  len = length(pred[1,:])
+  ts = tsteps[1:len]
   plt = plot(size=(600,800), layout=(2,1))
-  scatter!(ts, ode_data[1,:], label = "hare", subplot=1)
+  scatter!(ts, ode_data[1,1:len], label = "hare", subplot=1)
   scatter!(plt, ts, pred[1,:], label = "pred", subplot=1)
-  scatter!(ts, ode_data[2,:], label = "lynx", subplot=2)
+  scatter!(ts, ode_data[2,1:len], label = "lynx", subplot=2)
   scatter!(plt, ts, pred[2,:], label = "pred", subplot=2)
   if doplot
     display(plot(plt))
@@ -56,56 +57,39 @@ callback = function (p, l, pred, i; doplot = true)
   return false
 end
 
-function loss(p, i, prob, incr)
-	pred = predict_neuralode(p,prob)[1:2,:] # First rows  hare & lynx, others are dummies
+function loss(p, prob, w)
+	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
+	# bigger exponent gives steeper dropoff at end
 	pred_length = length(pred[1,:])
-	incr_steps = Int(incr*pts)
-	old_length = pred_length-incr_steps
-	pred_old = @view pred[:,1:old_length]
-	pred_new = @view pred[:,1+old_length:pred_length]
-	data_old = @view ode_data[:,1:old_length]
-	data_new = @view ode_data[:,1+old_length:pred_length]
-	loss_old = sum(abs2, data_old .- pred_old)
-	loss_new = sum(abs2, data_new .- pred_new)
-	loss = 10.0 * loss_old + loss_new
-	return loss, pred, i
+# 	println(pred_length); println(length(w[1,:]))
+# 	println(tsteps[length(w[1,:])]); println()
+	if pred_length != length(w[1,:]) println("Mismatch") end
+	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
+	return loss, pred
 end
 
-# function loss(p, i, prob, incr)
-# 	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
-# 	# bigger exponent gives steeper dropoff at end
-# 	pred_length = length(pred[1,:])
-# 	w = [0.01 + 1-(x/pred_length)^3 for x = 1:pred_length]'
-# 	weight = vcat(w,w)
-# 	loss = sum(abs2, weight .* (ode_data[:,1:pred_length] .- pred))
-# 	return loss, pred, i
-# end
-
-# Input parameters are prob_neuralode.p, return parameters in result.u
-#i = 30
-#result = DiffEqFlux.sciml_train(p -> loss(p,i), prob_neuralode.p, cb = callback)
-
-incr = 30.0
-for i in incr:incr:90.0
-	global result
-	println(i)
-	prob = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
-	p = if (i == incr) prob.p else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss(p,i,prob,incr), p,
-					ADAM(0.02); cb = callback, maxiters=300)
-end
-
-function weights(a, b=10, trunc=1e-4) 
-	w = [1 - cdf(Beta(a,b),x) for x = tsteps]
+function weights(a; b=10, trunc=1e-4) 
+	w = [1 - cdf(Beta(a,b),x/tsteps[end]) for x = tsteps]
 	v = w[w .> trunc]'
 	vcat(v,v)
 end
 
-for i in incr:incr:90.0
+beta_a = 1:1:51
+for i in 1:length(beta_a)
 	global result
-	println(i)
-	prob = NeuralODE(dudt2, (0.0,i), Tsit5(), saveat = tsteps[tsteps .<= i])
-	p = if (i == incr) prob.p else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss(p,i,prob,incr), p,
-					ADAM(0.02); cb = callback, maxiters=300)
+	println(beta_a[i])
+	w = weights(1.1^beta_a[i]; trunc=1e-2)
+	last_time = tsteps[length(w[1,:])]
+	prob = NeuralODE(dudt2, (0.0,last_time), # name particular ODE solver 
+					saveat = tsteps[tsteps .<= last_time])
+	p = if (i == 1) prob.p else result.u end
+	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w), p,
+					ADAM(0.002); cb = callback, maxiters=500)
 end
+
+# do additional BFGS round
+prob = NeuralODE(dudt2, tspan, Tsit5(), saveat = tsteps)
+ww = ones(2,length(tsteps))
+result = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u,
+					BFGS(); cb = callback, maxiters=500)
+
