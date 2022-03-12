@@ -2,9 +2,17 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions
 
 # number of variables to track in ODE, first two are hare and lynx
-n = 4 # must be >= 2
+n = 3 				# must be >= 2
+activation = tanh 	# activation function for first layer of NN
+layer_size = 20		# nodes in each layer of NN
+wt_trunc = 1e-2		# truncation for weights
+rtol = 1e-2			# relative tolerance for ODE solver
+atol = 1e-3			# absolute tolerance for ODE solver
+adm_learn = 0.0002	# Adam learning rate
+max_it = 500		# max iterates for each incremental learning step
+
 use_splines = true
-# points per year
+# points per year, extras added by spline interpolation
 pts = if use_splines 2 else 1 end
  
 df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
@@ -33,8 +41,7 @@ u0 = ode_data[:,1] # Initial condition, first time point in data
 u0 = vcat(u0,rand(Float32,n-2)*30)
 
 # Make a neural net with a NeuralODE layer
-dudt2 = FastChain(FastDense(n, 50, tanh), FastDense(50, n))
-#prob_neuralode = NeuralODE(dudt2, tspan, Tsit5(), saveat = tsteps)
+dudt2 = FastChain(FastDense(n, layer_size, activation), FastDense(layer_size, n))
 
 # Array of predictions from NeuralODE with parameters p starting at initial condition u0
 function predict_neuralode(p, prob)
@@ -78,18 +85,23 @@ beta_a = 1:1:51
 for i in 1:length(beta_a)
 	global result
 	println(beta_a[i])
-	w = weights(1.1^beta_a[i]; trunc=1e-2)
+	w = weights(1.1^beta_a[i]; trunc=wt_trunc)
 	last_time = tsteps[length(w[1,:])]
-	prob = NeuralODE(dudt2, (0.0,last_time), # name particular ODE solver 
-					saveat = tsteps[tsteps .<= last_time])
+	prob = NeuralODE(dudt2, (0.0,last_time),
+					saveat = tsteps[tsteps .<= last_time],reltol = rtol, abstol = atol)
 	p = if (i == 1) prob.p else result.u end
 	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w), p,
-					ADAM(0.002); cb = callback, maxiters=500)
+					ADAM(adm_learn); cb = callback, maxiters=max_it)
 end
 
-# do additional BFGS round
-prob = NeuralODE(dudt2, tspan, Tsit5(), saveat = tsteps)
+# do additional optimization round with equal weights at all points
+prob = NeuralODE(dudt2, tspan, saveat = tsteps, reltol = rtol, abstol = atol)
 ww = ones(2,length(tsteps))
-result = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u,
-					BFGS(); cb = callback, maxiters=500)
+result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u, ADAM(adm_learn);
+			cb = callback, maxiters=max_it)
 
+# save variable values
+# using JDL2
+# @save "filename" variable
+# @load "filename" # lists variables
+# @load "filename" var_name1 var_name2 ...
