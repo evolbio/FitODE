@@ -1,6 +1,10 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions
 
+# LV ODE with extra squared term for each "species". Data for 2D hare
+# and lynx. Better fit using n=3 or 4. For n=5 seems to be too high for
+# easy fit. NODE with n=3 fits better.
+
 # number of variables to track in ODE, first two are hare and lynx
 n = 3 # must be >= 2
 nsqr = n*n
@@ -41,10 +45,13 @@ u0 = vcat(u0,randn(Float32,n-2))
 swish(x) = x ./ (exp.(-x) .+ 1.0)
 sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
 
-# input vector length S
+# tanh seems to work best
 function ode!(du, u, p, t)
 	s = reshape(p[1:nsqr], n, n)
 	du .= tanh.(s*u .- p[nsqr+1:end])
+	#du .= sigmoid(s*u .- p[nsqr+1:end])
+	#du .= swish(s*u .- p[nsqr+1:end])
+	#du .= s*u .- p[nsqr+1:end]
 end
 
 callback = function (p, l, pred; doplot = true)
@@ -77,6 +84,11 @@ function loss(p, prob, w)
 	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
 	return loss, pred
 end
+
+# Use Beta cdf weights for iterative fitting. Fits earlier parts of time
+# series first with declining weights for later data points, then 
+# keep fitted parameters and redo, slightly increasing weights for
+# later time points.
 
 p = 0.1*rand(nsqr + n);	# n^2 matrix plus vector n for individual growth
 beta_a = 1:1:51

@@ -1,7 +1,10 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions
 
-# number of variables to track in ODE, first two are hare and lynx
+# Data for 2D hare and lynx. Only n=3 works well, perhaps 2D data sit in
+# 3D manifold??
+
+# number of variables to track in NODE, first two are hare and lynx
 n = 3 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
@@ -79,6 +82,11 @@ function weights(a; b=10, trunc=1e-4)
 	v = w[w .> trunc]'
 	vcat(v,v)
 end
+
+# Use Beta cdf weights for iterative fitting. Fits earlier parts of time
+# series first with declining weights for later data points, then 
+# keep fitted parameters and redo, slightly increasing weights for
+# later time points.
 
 beta_a = 1:1:51
 for i in 1:length(beta_a)
