@@ -12,8 +12,8 @@ adm_learn = 0.0002	# Adam learning rate
 max_it = 500		# max iterates for each incremental learning step
 
 use_splines = true
-# points per year, extras added by spline interpolation
-pts = if use_splines 2 else 1 end
+# if using splines, increase in data pts per year by interpolation
+pts = 2
  
 df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
 					DataFrame);
@@ -66,7 +66,6 @@ end
 
 function loss(p, prob, w)
 	pred = predict_neuralode(p, prob)[1:2,:] # First rows are hare & lynx, others dummies
-	# bigger exponent gives steeper dropoff at end
 	pred_length = length(pred[1,:])
 # 	println(pred_length); println(length(w[1,:]))
 # 	println(tsteps[length(w[1,:])]); println()

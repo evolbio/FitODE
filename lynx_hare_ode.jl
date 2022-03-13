@@ -1,12 +1,18 @@
-using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames, Statistics
-
-use_splines = true
+using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
+		Statistics, Distributions
 
 # number of variables to track in ODE, first two are hare and lynx
 n = 3 # must be >= 2
 nsqr = n*n
-# n^2 matrix for pairwise interactions plus vector n for individual growth
-p = 0.1*rand(nsqr + n);
+wt_trunc = 1e-2		# truncation for weights
+rtol = 1e-2			# relative tolerance for ODE solver
+atol = 1e-3			# absolute tolerance for ODE solver
+adm_learn = 0.0002	# Adam learning rate
+max_it = 500		# max iterates for each incremental learning step
+
+use_splines = true
+# if using splines, increase in data pts per year by interpolation
+pts = 2
 
 df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
 					DataFrame);
@@ -17,14 +23,15 @@ ode_data = ode_data .- mean(ode_data)
 
 datasize = length(ode_data[1,:]) # Number of time points
 tspan = (0.0f0, Float32(datasize-1)) # Time range
-tsteps = range(tspan[1], tspan[2], length = 2*datasize) # Split time range into equal steps
+tsteps = range(tspan[1], tspan[2], length = datasize) # Split to equal steps
 
-# spline
+# fit spline to data and use fitted data to train
 if use_splines
 	using Interpolations
 	hspline = CubicSplineInterpolation(tsteps,ode_data[1,:])
 	lspline = CubicSplineInterpolation(tsteps,ode_data[2,:])
 	#plot((0:0.1:90),hspline.(0:0.1:90)); plot!((0:0.1:90),lspline.(0:0.1:90))
+	tsteps = range(tspan[1], tspan[2], length = 1+pts*(datasize-1)) # Split to equal steps
 	ode_data = vcat(hspline.(tsteps)',lspline.(tsteps)');
 end
 
@@ -33,47 +40,68 @@ u0 = vcat(u0,randn(Float32,n-2))
 
 swish(x) = x ./ (exp.(-x) .+ 1.0)
 sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
-tanhh(x) = (exp(2x)-1)/(exp(2x)+1)
 
 # input vector length S
 function ode!(du, u, p, t)
-	w = reshape(p[1:nsqr], n, n)
-	du .= tanh.(w*u .- p[nsqr+1:end])
-	#du .= swish(w*u .- p[nsqr+1:end])
-	#du .= swish(w*u) .- p[nsqr+1:end]
+	s = reshape(p[1:nsqr], n, n)
+	du .= tanh.(s*u .- p[nsqr+1:end])
 end
 
-callback = function (p, l, pred, i; doplot = true)
+callback = function (p, l, pred; doplot = true)
   display(l)
   # plot current prediction against data
-  ts = tsteps[tsteps .<= i]
-  plt = scatter(ts, ode_data[1,:], label = "data")
-  scatter!(plt, ts, pred[1,:], label = "prediction")
+  len = length(pred[1,:])
+  ts = tsteps[1:len]
+  plt = plot(size=(600,800), layout=(2,1))
+  scatter!(ts, ode_data[1,1:len], label = "hare", subplot=1)
+  scatter!(plt, ts, pred[1,:], label = "pred", subplot=1)
+  scatter!(ts, ode_data[2,1:len], label = "lynx", subplot=2)
+  scatter!(plt, ts, pred[2,:], label = "pred", subplot=2)
   if doplot
     display(plot(plt))
   end
   return false
 end
 
-# try training in parts, following https://diffeqflux.sciml.ai/dev/examples/local_minima/
-function loss(p, i, prob)
-  #pred = solve(prob, Tsit5(), p=p, saveat = tsteps[tsteps .<= i], maxiters=100000)
-  # see https://diffeqflux.sciml.ai/dev/ControllingAdjoints/ for sensealg
-  pred = solve(prob, p=p, saveat = tsteps[tsteps .<= i], maxiters=300000,
-  				abstol=1e-4, reltol=1e-2)
-  # use first two variables to match lynx & hare data
-  # other variables are there to help the fitting
-  loss = sum(abs2, pred[1:2,:] .- ode_data[:,1:length(pred[1,:])])
-  return loss, pred, i
+function weights(a; b=10, trunc=1e-4) 
+	w = [1 - cdf(Beta(a,b),x/tsteps[end]) for x = tsteps]
+	v = w[w .> trunc]'
+	vcat(v,v)
 end
 
-#for i in 9.0:9.0:18.0
-p = 0.1*rand(nsqr + n);
-for i in 3.0:3.0:90.0
-	println(i)
-	#display(p)
-	prob = ODEProblem(ode!, u0, (0.0,i), p)
-	result = DiffEqFlux.sciml_train(p -> loss(p, i, prob), p, ADAM(0.0002),
-		cb = callback, maxiters = 1000, abstol=1e-4, reltol=1e-2)
-	p = result.u
+function loss(p, prob, w)
+	# First rows are hare & lynx, others dummies
+	pred = solve(prob, p=p)[1:2,:] 
+	pred_length = length(pred[1,:])
+	if pred_length != length(w[1,:]) println("Mismatch") end
+	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
+	return loss, pred
 end
+
+p = 0.1*rand(nsqr + n);	# n^2 matrix plus vector n for individual growth
+beta_a = 1:1:51
+for i in 1:length(beta_a)
+	global result
+	println(beta_a[i])
+	w = weights(1.1^beta_a[i]; trunc=wt_trunc)
+	last_time = tsteps[length(w[1,:])]
+	prob = ODEProblem(ode!, u0, tspan, p, saveat = tsteps[tsteps .<= last_time],
+					reltol = rtol, abstol = atol)
+	p = if (i == 1) prob.p else result.u end
+	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w), p,
+					ADAM(adm_learn); cb = callback, maxiters=max_it)
+end
+
+# do additional optimization round with equal weights at all points
+prob = ODEProblem(ode!, u0, tspan, p, saveat = tsteps, reltol = rtol, abstol = atol)
+ww = ones(2,length(tsteps))
+# change p to result.u
+result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u, ADAM(adm_learn);
+			cb = callback, maxiters=max_it)
+
+# save variable values
+# using JDL2
+# @save "filename" variable
+# @load "filename" # lists variables
+# @load "filename" var_name1 var_name2 ...
+
