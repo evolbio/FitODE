@@ -85,6 +85,7 @@ if use_splines
 	lspline = CubicSplineInterpolation(tsteps,ode_data[2,:])
 	#plot((0:0.1:90),hspline.(0:0.1:90)); plot!((0:0.1:90),lspline.(0:0.1:90))
 	tsteps = range(tspan[1], tspan[2], length = 1+pts*(datasize-1)) # Split to equal steps
+	ode_data_orig = ode_data	# store original data
 	ode_data = vcat(hspline.(tsteps)',lspline.(tsteps)');
 end
 
@@ -189,7 +190,7 @@ callback(p3,loss3,pred3; show_lines=true, show_third=third)
 # out_file = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
 jldsave(out_file; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
-# Also, could do fit back to original data rather than to spines
+# Also, could do fit back to ode_data_orig after fitting to splines
 			
 # dt = load(outfile)
 # dt["pred1"] # for prediction data for first set
