@@ -2,8 +2,8 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates
 
 # Data for 2D hare and lynx. n=3 works well, perhaps 2D data sit in
-# 3D manifold?? Not much success in my runs with other n values, but
-# might find combination of parameters to make other n values work ??
+# 3D manifold?? n=4 gives a better fit. Maybe higher n would be 
+# better, but whether that is valuable depends on goal of fitting.
 
 # Occasionally system will lock into local minimum that is clearly not
 # a good fit. Rerun program, which seeds with different initial
@@ -21,7 +21,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # to stiff ODE algorithm, see solver variable below.
 
 # number of variables to track in NODE, first two are hare and lynx
-n = 4 				# must be >= 2
+n = 3 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
 wt_trunc = 1e-2		# truncation for weights
