@@ -29,7 +29,7 @@ rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2 
 max_it = 500		# max iterates for each incremental learning step
-csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv"
+csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/output.jld2"
 
 # Training done iteratively, starting with first part of time series,

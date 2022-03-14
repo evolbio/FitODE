@@ -18,7 +18,7 @@ use_splines = true
 # if using splines, increase in data pts per year by interpolation
 pts = 2
 
-df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
+df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv",
 					DataFrame);
 ode_data = permutedims(Array{Float32}(df[:,2:3]));
 # take log and then normalize by average
