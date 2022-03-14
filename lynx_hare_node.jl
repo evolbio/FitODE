@@ -21,7 +21,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # to stiff ODE algorithm, see solver variable below.
 
 # number of variables to track in NODE, first two are hare and lynx
-n = 3 				# must be >= 2
+n = 4 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
 wt_trunc = 1e-2		# truncation for weights
@@ -29,6 +29,24 @@ rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam learn rate, 0.0002 for Tsit5, more for TRBDF2 
 max_it = 500		# max iterates for each incremental learning step
+
+# Training done iteratively, starting with first part of time series,
+# then adding additional time series steps and continuing the fit
+# process. For each step, the time points are weighted according
+# to a 1 - cdf(Beta distribution). To move the weights to the right
+# (later times), the first parameter of the beta distribution is
+# increased repeatedly over i = 1..wt_steps, with the parameter
+# equal to wt_base^i.
+
+# Smaller values of wt_base move the weighting increments at a 
+# slower pace and require more increments and longer run time, 
+# but may gain by avoiding the common local minimum close to 
+# a simple regression line through the fluctuating time series.
+
+# wt_steps is smallest integer such that wt_base^wt_steps >=500.
+
+wt_base = 1.1		# good default is 1.1
+wt_steps = Int(ceil(log(500)/log(wt_base)))
 
 # ODE solver, Tsit5() for nonstiff and fastest, but may be unstable.
 # Alternatively use stiff solver TRBDF2(), slower but more stable.
@@ -44,7 +62,7 @@ max_it = 500		# max iterates for each incremental learning step
 solver = TRBDF2()
 
 use_splines = true
-# if using splines, increase in data pts per year by interpolation
+# if using splines, increase data to pts per year by interpolation
 pts = 2
  
 df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
@@ -70,7 +88,9 @@ if use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-u0 = vcat(u0,rand(Float32,n-2)*30)
+# add additional initial values for dummy dimensions, maybe optimize these values?
+#u0 = vcat(u0,rand(Float32,n-2)*30) # gives positive, larger values
+u0 = vcat(u0,randn(Float32,n-2))
 
 # Make a neural net with a NeuralODE layer
 dudt2 = FastChain(FastDense(n, layer_size, activation), FastDense(layer_size, n))
@@ -80,16 +100,22 @@ function predict_neuralode(p, prob)
   Array(prob(u0, p))
 end
 
-callback = function (p, l, pred; doplot = true)
+callback = function (p, l, pred; doplot = true, show_lines = false, show_third = false)
   display(l)
   # plot current prediction against data
   len = length(pred[1,:])
   ts = tsteps[1:len]
-  plt = plot(size=(600,800), layout=(2,1))
-  scatter!(ts, ode_data[1,1:len], label = "hare", subplot=1)
-  scatter!(plt, ts, pred[1,:], label = "pred", subplot=1)
-  scatter!(ts, ode_data[2,1:len], label = "lynx", subplot=2)
-  scatter!(plt, ts, pred[2,:], label = "pred", subplot=2)
+  ysize = if show_third 1200 else 800 end
+  panels = if show_third 3 else 2 end
+  plt = plot(size=(600,ysize), layout=(panels,1))
+  plot_type! = if show_lines plot! else scatter! end
+  plot_type!(ts, ode_data[1,1:len], label = "hare", subplot=1)
+  plot_type!(plt, ts, pred[1,:], label = "pred", subplot=1)
+  plot_type!(ts, ode_data[2,1:len], label = "lynx", subplot=2)
+  plot_type!(plt, ts, pred[2,:], label = "pred", subplot=2)
+  if show_third
+  	plot_type!(plt, ts, pred[3,:], label = "3rdD", subplot=3)
+  end
   if doplot
     display(plot(plt))
   end
@@ -118,11 +144,11 @@ end
 # greater top number in iterate range will improve fitting but will
 # require more computation.
 
-beta_a = 1:1:65
+beta_a = 1:1:wt_steps
 for i in 1:length(beta_a)
 	global result
 	println(beta_a[i])
-	w = weights(1.1^beta_a[i]; trunc=wt_trunc)
+	w = weights(wt_base^beta_a[i]; trunc=wt_trunc)
 	last_time = tsteps[length(w[1,:])]
 	prob = NeuralODE(dudt2, (0.0,last_time), solver,
 					saveat = tsteps[tsteps .<= last_time],reltol = rtol, abstol = atol)
@@ -155,7 +181,13 @@ lossval = loss(p3,prob,ww)
 loss3 = lossval[1]
 pred3 = lossval[2]
 
+# final plot with third dimension and lines
+callback(p3,loss3,pred3; show_lines=true, show_third=true)
+
 # outfile = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
 outfile = "output.jld2"
 jldsave("/Users/steve/Desktop/" * outfile;
 			p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
+			
+# dt = load("/Users/steve/Desktop/" * outfile)
+# dt["pred1"] # for prediction data for first set
