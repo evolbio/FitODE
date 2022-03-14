@@ -21,14 +21,16 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # to stiff ODE algorithm, see solver variable below.
 
 # number of variables to track in NODE, first two are hare and lynx
-n = 3 				# must be >= 2
+n = 2 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
 wt_trunc = 1e-2		# truncation for weights
 rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
-adm_learn = 0.0005	# Adam learn rate, 0.0002 for Tsit5, more for TRBDF2 
+adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2 
 max_it = 500		# max iterates for each incremental learning step
+csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv"
+out_file = "/Users/steve/Desktop/output.jld2"
 
 # Training done iteratively, starting with first part of time series,
 # then adding additional time series steps and continuing the fit
@@ -65,8 +67,7 @@ use_splines = true
 # if using splines, increase data to pts per year by interpolation
 pts = 2
  
-df = CSV.read("/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/lynx_hare_data.csv",
-					DataFrame);
+df = CSV.read(csv_file, DataFrame);
 ode_data = permutedims(Array{Float32}(df[:,2:3]));
 
 # take log and then normalize by average
@@ -182,12 +183,11 @@ loss3 = lossval[1]
 pred3 = lossval[2]
 
 # final plot with third dimension and lines
-callback(p3,loss3,pred3; show_lines=true, show_third=true)
+third = if n >= 3 true else false end
+callback(p3,loss3,pred3; show_lines=true, show_third=third)
 
 # outfile = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
-outfile = "output.jld2"
-jldsave("/Users/steve/Desktop/" * outfile;
-			p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
+jldsave(outfile; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 			
-# dt = load("/Users/steve/Desktop/" * outfile)
+# dt = load(outfile)
 # dt["pred1"] # for prediction data for first set
