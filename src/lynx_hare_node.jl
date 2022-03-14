@@ -21,7 +21,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # to stiff ODE algorithm, see solver variable below.
 
 # number of variables to track in NODE, first two are hare and lynx
-n = 2 				# must be >= 2
+n = 3 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
 wt_trunc = 1e-2		# truncation for weights
@@ -186,8 +186,8 @@ pred3 = lossval[2]
 third = if n >= 3 true else false end
 callback(p3,loss3,pred3; show_lines=true, show_third=third)
 
-# outfile = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
-jldsave(outfile; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
+# out_file = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
+jldsave(out_file; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
 # Also, could do fit back to original data rather than to spines
 			
