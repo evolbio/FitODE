@@ -188,6 +188,8 @@ callback(p3,loss3,pred3; show_lines=true, show_third=third)
 
 # outfile = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
 jldsave(outfile; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
+
+# Also, could do fit back to original data rather than to spines
 			
 # dt = load(outfile)
 # dt["pred1"] # for prediction data for first set

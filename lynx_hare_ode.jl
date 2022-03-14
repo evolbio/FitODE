@@ -6,7 +6,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # easy fit. NODE with n=3 fits better.
 
 # number of variables to track in ODE, first two are hare and lynx
-n = 3 # must be >= 2
+n = 2 # must be >= 2
 nsqr = n*n
 wt_trunc = 1e-2		# truncation for weights
 rtol = 1e-2			# relative tolerance for ODE solver
@@ -110,6 +110,8 @@ ww = ones(2,length(tsteps))
 # change p to result.u
 result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u, ADAM(adm_learn);
 			cb = callback, maxiters=max_it)
+			
+# Also, could do fit back to original data rather than to spines
 
 # save variable values
 # using JDL2
