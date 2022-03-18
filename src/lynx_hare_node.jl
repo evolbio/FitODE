@@ -1,6 +1,13 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates
 
+# THIS VERSION OPTIMIZES INITIAL VALUE FOR DUMMY VARIABLE DIMENSIONS.
+# CONSIDER GOING BACK TO RANDOM VALUE FOR INITIAL DUMMY VARIABLE.
+# IT MAY BE THAT OPTIMIZING VALUE SETS THE VALUE WHEN FITTING FOR
+# THE INITIAL TIMESTEPS AND THEN GETS FIXED THERE, CAUSING TRAP
+# IN LOCAL MINIMUM. WITH RANDOM VALUE, SOMETIMES BETTER OR WORSE
+# BUT OCCASIONALLY MAY BE BETTER THAN OPTIMIZING ON FIRST VALUES.
+
 # Data for 2D hare and lynx. n=3 works well, perhaps 2D data sit in
 # 3D manifold?? n=4 gives a better fit. Maybe higher n would be 
 # better, but whether that is valuable depends on goal of fitting.
