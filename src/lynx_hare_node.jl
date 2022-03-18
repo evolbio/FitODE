@@ -27,7 +27,7 @@ layer_size = 20		# nodes in each layer of NN
 wt_trunc = 1e-2		# truncation for weights
 rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
-adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2 
+adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 500		# max iterates for each incremental learning step
 csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/output.jld2"
@@ -90,16 +90,16 @@ if use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-# add additional initial values for dummy dimensions, maybe optimize these values?
-#u0 = vcat(u0,rand(Float32,n-2)*30) # gives positive, larger values
-u0 = vcat(u0,randn(Float32,n-2))
+# add additional initial values for dummy dimensions in predict_neuralode()
 
 # Make a neural net with a NeuralODE layer
 dudt2 = FastChain(FastDense(n, layer_size, activation), FastDense(layer_size, n))
 
 # Array of predictions from NeuralODE with parameters p starting at initial condition u0
+# u0 for dummy dimensions are first entries of p, allows optimization of dummy u0
 function predict_neuralode(p, prob)
-  Array(prob(u0, p))
+  u_init = vcat(u0,p[1:n-2])
+  Array(prob(u_init, p[n-1:end]))
 end
 
 callback = function (p, l, pred; doplot = true, show_lines = false, show_third = false)
@@ -154,7 +154,8 @@ for i in 1:length(beta_a)
 	last_time = tsteps[length(w[1,:])]
 	prob = NeuralODE(dudt2, (0.0,last_time), solver,
 					saveat = tsteps[tsteps .<= last_time],reltol = rtol, abstol = atol)
-	p = if (i == 1) prob.p else result.u end
+	# increase p length by adding u0 for dummy dimensions
+	p = if (i == 1) vcat(randn(n-2),prob.p) else result.u end
 	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w), p,
 					ADAM(adm_learn); cb = callback, maxiters=max_it)
 end
