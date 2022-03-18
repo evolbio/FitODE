@@ -8,6 +8,11 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # IN LOCAL MINIMUM. WITH RANDOM VALUE, SOMETIMES BETTER OR WORSE
 # BUT OCCASIONALLY MAY BE BETTER THAN OPTIMIZING ON FIRST VALUES.
 
+# See git version 0203ed1, which used random seeding of initial values
+# for dummy dimensions. When using random seeding, need to run fitting
+# several times because each random initial value for dummy dimensions
+# causes a different fit.
+
 # Data for 2D hare and lynx. n=3 works well, perhaps 2D data sit in
 # 3D manifold?? n=4 gives a better fit. Maybe higher n would be 
 # better, but whether that is valuable depends on goal of fitting.
