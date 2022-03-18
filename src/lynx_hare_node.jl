@@ -192,5 +192,5 @@ jldsave(out_file; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
 # Also, could do fit back to ode_data_orig after fitting to splines
 			
-# dt = load(outfile)
+# dt = load(out_file)
 # dt["pred1"] # for prediction data for first set
