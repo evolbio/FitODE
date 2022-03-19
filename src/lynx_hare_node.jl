@@ -1,5 +1,5 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
-		Statistics, Distributions, JLD2, Dates
+		Statistics, Distributions, JLD2, Dates, Random
 
 # THIS VERSION OPTIMIZES INITIAL VALUE FOR DUMMY VARIABLE DIMENSIONS.
 # CONSIDER GOING BACK TO RANDOM VALUE FOR INITIAL DUMMY VARIABLE.
@@ -42,6 +42,11 @@ adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change 
 max_it = 500		# max iterates for each incremental learning step
 csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/output.jld2"
+seed_file = "/Users/steve/Desktop/seed.julia"
+
+# if true, program generates new random seed, otherwise uses rand_seed
+generate_rand_seed = true
+rand_seed = 0x695db8870561193d
 
 # Training done iteratively, starting with first part of time series,
 # then adding additional time series steps and continuing the fit
@@ -151,6 +156,19 @@ function weights(a; b=10, trunc=1e-4)
 	vcat(v,v)
 end
 
+# check generator state: copy(Random.default_rng())
+# to reset seed to prior saved state, set generate_rand_seed = false
+# and set rand_seed to prior saved value
+if generate_rand_seed
+	seed_val = rand(UInt)
+	Random.seed!(seed_val)
+	open("/Users/steve/Desktop/rand.out", "w") do file
+		write(file, string(seed_val))
+	end
+else
+	Random.seed!(rand_seed)
+end
+														
 # Use Beta cdf weights for iterative fitting. Fits earlier parts of time
 # series first with declining weights for later data points, then 
 # keep fitted parameters and redo, slightly increasing weights for
