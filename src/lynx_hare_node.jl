@@ -1,13 +1,6 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates, Random
 
-# THIS VERSION OPTIMIZES INITIAL VALUE FOR DUMMY VARIABLE DIMENSIONS.
-# CONSIDER GOING BACK TO RANDOM VALUE FOR INITIAL DUMMY VARIABLE.
-# IT MAY BE THAT OPTIMIZING VALUE SETS THE VALUE WHEN FITTING FOR
-# THE INITIAL TIMESTEPS AND THEN GETS FIXED THERE, CAUSING TRAP
-# IN LOCAL MINIMUM. WITH RANDOM VALUE, SOMETIMES BETTER OR WORSE
-# BUT OCCASIONALLY MAY BE BETTER THAN OPTIMIZING ON FIRST VALUES.
-
 # See git version 0203ed1, which used random seeding of initial values
 # for dummy dimensions. When using random seeding, need to run fitting
 # several times because each random initial value for dummy dimensions
@@ -44,7 +37,17 @@ csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_har
 out_file = "/Users/steve/Desktop/output.jld2"
 seed_file = "/Users/steve/Desktop/seed.julia"
 
+# Option to optimize initial conditions for dummy dimension variables
+# vs using random values for dummy variable initial values
+# It may be that optimizing value sets the value when fitting for
+# the initial timesteps and then gets fixed there, causing trap
+# in local minimum. With random value, sometimes better or worse
+# but occasionally may be better than optimizing on first values.
+
+optimize_dummy_u0 = false
+
 # if true, program generates new random seed, otherwise uses rand_seed
+# these defaults can be overridden by args to set_rand_seed()
 generate_rand_seed = true
 rand_seed = 0x695db8870561193d
 
@@ -124,17 +127,24 @@ if use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-# add additional initial values for dummy dimensions in predict_neuralode()
+
+if optimize_dummy_u0
+	# Array of predictions from NeuralODE with parameters p starting at initial condition u0
+	# u0 for dummy dimensions are first entries of p, allows optimization of dummy u0
+	function predict_neuralode(p, prob, u0)
+	  u_init = vcat(u0,p[1:n-2])
+	  Array(prob(u_init, p[n-1:end]))
+	end
+else
+	# add additional initial values for dummy dimensions
+	u0 = vcat(u0,randn(Float32,n-2)) 
+	function predict_neuralode(p, prob, u0)
+	  Array(prob(u0, p))
+	end
+end
 
 # Make a neural net with a NeuralODE layer
 dudt2 = FastChain(FastDense(n, layer_size, activation), FastDense(layer_size, n))
-
-# Array of predictions from NeuralODE with parameters p starting at initial condition u0
-# u0 for dummy dimensions are first entries of p, allows optimization of dummy u0
-function predict_neuralode(p, prob)
-  u_init = vcat(u0,p[1:n-2])
-  Array(prob(u_init, p[n-1:end]))
-end
 
 callback = function (p, l, pred; doplot = true, show_lines = false, show_third = false)
   display(l)
@@ -158,8 +168,8 @@ callback = function (p, l, pred; doplot = true, show_lines = false, show_third =
   return false
 end
 
-function loss(p, prob, w)
-	pred_all = predict_neuralode(p, prob)
+function loss(p, prob, w, u0)
+	pred_all = predict_neuralode(p, prob, u0)
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
 	pred_length = length(pred[1,:])
 	if pred_length != length(w[1,:]) println("Mismatch") end
@@ -190,8 +200,12 @@ for i in 1:length(beta_a)
 	prob = NeuralODE(dudt2, (0.0,last_time), solver,
 					saveat = tsteps[tsteps .<= last_time],reltol = rtol, abstol = atol)
 	# increase p length by adding u0 for dummy dimensions
-	p = if (i == 1) vcat(randn(n-2),prob.p) else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w), p,
+	if (i == 1)
+		p = optimize_dummy_u0 ? vcat(randn(n-2),prob.p) : prob.p
+	else
+		p = result.u
+	end
+	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w,u0), p,
 					ADAM(adm_learn); cb = callback, maxiters=max_it)
 end
 
@@ -199,23 +213,23 @@ end
 prob = NeuralODE(dudt2, tspan, solver, saveat = tsteps, reltol = rtol, abstol = atol)
 ww = ones(2,length(tsteps))
 p1 = result.u
-lossval = loss(p1,prob,ww)
+lossval = loss(p1,prob,ww,u0)
 loss1 = lossval[1]
 pred1 = lossval[2]
 
-result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww), result.u, ADAM(adm_learn);
+result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0), result.u, ADAM(adm_learn);
 			cb = callback, maxiters=max_it)
 
 p2 = result2.u
-lossval = loss(p2,prob,ww)
+lossval = loss(p2,prob,ww,u0)
 loss2 = lossval[1]
 pred2 = lossval[2]
 
-result3 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww),p2,BFGS(),
+result3 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0),p2,BFGS(),
 			cb = callback, maxiters=max_it)
 
 p3 = result3.u
-lossval = loss(p3,prob,ww)
+lossval = loss(p3,prob,ww,u0)
 loss3 = lossval[1]
 pred3 = lossval[2]
 
