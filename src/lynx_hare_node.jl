@@ -48,6 +48,23 @@ seed_file = "/Users/steve/Desktop/seed.julia"
 generate_rand_seed = true
 rand_seed = 0x695db8870561193d
 
+# check generator state: copy(Random.default_rng())
+# to reset seed to prior saved state, set generate_rand_seed = false
+# and set rand_seed to prior saved value
+function set_rand_seed(gen_rand_seed=generate_rand_seed, new_seed_val=rand_seed)
+	if gen_rand_seed
+		seed_val = rand(UInt)
+		Random.seed!(seed_val)
+		open("/Users/steve/Desktop/rand.out", "w") do file
+			write(file, string(seed_val))
+		end
+		println("New random seed is ", seed_val)
+	else
+		Random.seed!(rand_seed)
+		println("Restored random seed to ", new_seed_val)
+	end
+end
+														
 # Training done iteratively, starting with first part of time series,
 # then adding additional time series steps and continuing the fit
 # process. For each step, the time points are weighted according
@@ -156,19 +173,6 @@ function weights(a; b=10, trunc=1e-4)
 	vcat(v,v)
 end
 
-# check generator state: copy(Random.default_rng())
-# to reset seed to prior saved state, set generate_rand_seed = false
-# and set rand_seed to prior saved value
-if generate_rand_seed
-	seed_val = rand(UInt)
-	Random.seed!(seed_val)
-	open("/Users/steve/Desktop/rand.out", "w") do file
-		write(file, string(seed_val))
-	end
-else
-	Random.seed!(rand_seed)
-end
-														
 # Use Beta cdf weights for iterative fitting. Fits earlier parts of time
 # series first with declining weights for later data points, then 
 # keep fitted parameters and redo, slightly increasing weights for
@@ -177,6 +181,7 @@ end
 # require more computation.
 
 beta_a = 1:1:wt_steps
+set_rand_seed();
 for i in 1:length(beta_a)
 	global result
 	println(beta_a[i])
