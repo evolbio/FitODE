@@ -36,7 +36,6 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 n = 3 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
 layer_size = 20		# nodes in each layer of NN
-wt_trunc = 1e-2		# truncation for weights
 rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
@@ -61,6 +60,7 @@ out_file = "/Users/steve/Desktop/output.jld2"
 
 wt_base = 1.1		# good default is 1.1
 wt_steps = Int(ceil(log(500)/log(wt_base)))
+wt_trunc = 1e-2		# truncation for weights
 
 # ODE solver, Tsit5() for nonstiff and fastest, but may be unstable.
 # Alternatively use stiff solver TRBDF2(), slower but more stable.

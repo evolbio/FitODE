@@ -1,18 +1,24 @@
 using DiffEqFlux, DifferentialEquations, GalacticOptim, Flux, Plots, StatsPlots
-using CSV, DataFrames, Statistics
+using CSV, DataFrames, Statistics, Distributions
 
 n = 3 				# must be >= 2
 activation = tanh 	# activation function for first layer of NN
-layer_size = 20		# nodes in each layer of NN
+layer_size = 30		# nodes in each layer of NN
 rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 500		# max iterates for each incremental learning step
 csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/output.jld2"
+solver = TRBDF2()
+
 train_end_time = 10.0
 
-solver = TRBDF2()
+# wt_steps is smallest integer such that wt_base^wt_steps >=500.
+
+wt_base = 1.1		# good default is 1.1
+wt_steps = Int(ceil(log(500)/log(wt_base)))
+wt_trunc = 1e-2		# truncation for weights
 
 use_splines = true
 # if using splines, increase data to pts per year by interpolation
@@ -56,8 +62,17 @@ function predict(p, prob)
   Array(prob(u_init, p[n-1:end]))
 end
 
-function loss(p, prob)
-    sum(abs2, y_train .- predict(p, prob)[1:2,:])
+# function loss(p, prob)
+#     sum(abs2, y_train .- predict(p, prob)[1:2,:])
+# end
+
+function loss(p, prob, w)
+	pred_all = predict(p, prob)
+	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
+	pred_length = length(pred[1,:])
+	if pred_length != length(w[1,:]) println("Mismatch") end
+	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
+	return loss
 end
 
 sgld(∇L, θᵢ, t, a = 2.5e-3, b = 0.05, γ = 0.35) = begin
@@ -67,23 +82,59 @@ sgld(∇L, θᵢ, t, a = 2.5e-3, b = 0.05, γ = 0.35) = begin
     θᵢ .-= Δθᵢ
 end
 
+function weights(a; b=10, trunc=1e-4) 
+	w = [1 - cdf(Beta(a,b),x/tsteps[end]) for x = tsteps]
+	v = w[w .> trunc]'
+	vcat(v,v)
+end
+
+# Use Beta cdf weights for iterative fitting. Fits earlier parts of time
+# series first with declining weights for later data points, then 
+# keep fitted parameters and redo, slightly increasing weights for
+# later time points. Using smaller value for x in x^beta_a[i] and
+# greater top number in iterate range will improve fitting but will
+# require more computation.
+
+beta_a = 1:1:wt_steps
+
 parameters = []
 losses = Float64[]
 grad_norm = Float64[]
 
-p_orig = deepcopy(prob_node.p)
+p_orig = deepcopy(prob_node.p)type
 θ = vcat(randn(n-2),p_orig)
+
 #@time for t in 1:45000
-@time for t in 1:2000
-	if t % 100 == 0 println("t = " , t) end
-    grad = gradient(p -> loss(p, train_prob), θ)[1]
-    sgld(grad, θ, t)
-    tmp = deepcopy(θ)
-    append!(losses, loss(θ, train_prob))
-    append!(grad_norm, sum(abs2, grad))
-    append!(parameters, [tmp])
-    println(loss(θ, train_prob))
+for i in 1:length(beta_a)
+	println(beta_a[i])
+	w = weights(wt_base^beta_a[i]; trunc=wt_trunc)
+	steps = length(w[1,:])
+	last_time = tsteps[steps]
+	train_prob = NeuralODE(dudt, (0., last_time), solver, saveat = tsteps[1:steps])
+	for t in 1:1000
+		if t % 100 == 0 println("t = " , t) end
+		grad = gradient(p -> loss(p, train_prob, w), θ)[1]
+		sgld(grad, θ, t)
+		tmp = deepcopy(θ)
+		curr_loss = loss(θ, train_prob, w)
+		append!(losses, curr_loss)
+		append!(grad_norm, sum(abs2, grad))
+		append!(parameters, [tmp])
+		println(curr_loss)
+	end
 end
+
+# @time for t in 1:45000
+# for t in 1:2000
+# 	if t % 100 == 0 println("t = " , t) end
+#     grad = gradient(p -> loss(p, train_prob), θ)[1]
+#     sgld(grad, θ, t)
+#     tmp = deepcopy(θ)
+#     append!(losses, loss(θ, train_prob))
+#     append!(grad_norm, sum(abs2, grad))
+#     append!(parameters, [tmp])
+#     println(loss(θ, train_prob))
+# end
 
 plot(losses, yscale = :log10)
 plot(grad_norm, yscale =:log10)
