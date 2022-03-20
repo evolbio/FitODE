@@ -237,6 +237,8 @@ lossval = loss(p2,prob,ww,u0)
 loss2 = lossval[1]
 pred2 = lossval[2]
 
+grad = gradient(p->loss(p,prob,ww,u0)[1], p2)
+
 result3 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0),p2,BFGS(),
 			cb = callback, maxiters=max_it)
 
