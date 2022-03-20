@@ -105,6 +105,8 @@ solver = TRBDF2()
 use_splines = true
 # if using splines, increase data to pts per year by interpolation
 pts = 2
+use_gauss_filter = true	# smooth the splines by gauss filtering
+filter_sd = 1.2
  
 df = CSV.read(csv_file, DataFrame);
 ode_data = permutedims(Array{Float32}(df[:,2:3]));
@@ -120,12 +122,20 @@ tsteps = range(tspan[1], tspan[2], length = datasize) # Split to equal steps
 # fit spline to data and use fitted data to train
 if use_splines
 	using Interpolations
+	ode_data_orig = ode_data	# store original data
 	hspline = CubicSplineInterpolation(tsteps,ode_data[1,:])
 	lspline = CubicSplineInterpolation(tsteps,ode_data[2,:])
-	#plot((0:0.1:90),hspline.(0:0.1:90)); plot!((0:0.1:90),lspline.(0:0.1:90))
 	tsteps = range(tspan[1], tspan[2], length = 1+pts*(datasize-1)) # Split to equal steps
-	ode_data_orig = ode_data	# store original data
-	ode_data = vcat(hspline.(tsteps)',lspline.(tsteps)');
+	if use_gauss_filter
+		using QuadGK
+		conv(y, spline, sd) = 
+			quadgk(x -> spline(x) * pdf(Normal(0,sd),y-x), tspan[1], tspan[2])[1]
+		ode_data = vcat([conv(y,hspline,filter_sd) for y=tsteps]',
+							[conv(y,lspline,filter_sd) for y=tsteps]');
+	else
+		ode_data = vcat(hspline.(tsteps)',lspline.(tsteps)');
+	end
+	#plot(tsteps,ode_data[1,:]); plot!(tsteps,ode_data[2,:])
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
