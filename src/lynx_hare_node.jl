@@ -23,7 +23,8 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 
 # Some initial parameters lead to instabilities in solving ODE. Either
 # restart to get different initial seeding parameters or change solver
-# to stiff ODE algorithm, see solver variable below.
+# to stiff ODE algorithm, see solver variable below, or modify learning
+# rate.
 
 # number of variables to track in NODE, first two are hare and lynx
 n = 3 				# must be >= 2
@@ -41,8 +42,9 @@ seed_file = "/Users/steve/Desktop/seed.julia"
 # vs using random values for dummy variable initial values
 # It may be that optimizing value sets the value when fitting for
 # the initial timesteps and then gets fixed there, causing trap
-# in local minimum. With random value, sometimes better or worse
-# but occasionally may be better than optimizing on first values.
+# in local minimum. With random initial value (not optimized), sometimes
+# better or worse but over repeated trials may be better than optimizing
+# on first values.
 
 optimize_dummy_u0 = false
 
@@ -131,15 +133,15 @@ u0 = ode_data[:,1] # Initial condition, first time point in data
 if optimize_dummy_u0
 	# Array of predictions from NeuralODE with parameters p starting at initial condition u0
 	# u0 for dummy dimensions are first entries of p, allows optimization of dummy u0
-	function predict_neuralode(p, prob, u0)
-	  u_init = vcat(u0,p[1:n-2])
-	  Array(prob(u_init, p[n-1:end]))
+	function predict_neuralode(p, prob, u_init)
+	  u_new = vcat(u_init,p[1:n-2])
+	  Array(prob(u_new, p[n-1:end]))
 	end
 else
 	# add additional initial values for dummy dimensions
 	u0 = vcat(u0,randn(Float32,n-2)) 
-	function predict_neuralode(p, prob, u0)
-	  Array(prob(u0, p))
+	function predict_neuralode(p, prob, u_init)
+	  Array(prob(u_init, p))
 	end
 end
 
@@ -168,8 +170,8 @@ callback = function (p, l, pred; doplot = true, show_lines = false, show_third =
   return false
 end
 
-function loss(p, prob, w, u0)
-	pred_all = predict_neuralode(p, prob, u0)
+function loss(p, prob, w, u_init)
+	pred_all = predict_neuralode(p, prob, u_init)
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
 	pred_length = length(pred[1,:])
 	if pred_length != length(w[1,:]) println("Mismatch") end
