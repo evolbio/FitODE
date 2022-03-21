@@ -233,7 +233,7 @@ end
 prob = NeuralODE(dudt2, tspan, solver, saveat = tsteps, reltol = rtol, abstol = atol)
 ww = ones(2,length(tsteps))
 p1 = result.u
-lossval = loss(p1,prob,ww,u0)
+lossval = loss(p1,prob,ww,u0);
 loss1 = lossval[1]
 pred1 = lossval[2]
 
@@ -241,7 +241,7 @@ result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0), result.u, ADAM(adm_lea
 			cb = callback, maxiters=max_it)
 
 p2 = result2.u
-lossval = loss(p2,prob,ww,u0)
+lossval = loss(p2,prob,ww,u0);
 loss2 = lossval[1]
 pred2 = lossval[2]
 
@@ -251,13 +251,13 @@ result3 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0),p2,BFGS(),
 			cb = callback, maxiters=max_it)
 
 p3 = result3.u
-lossval = loss(p3,prob,ww,u0)
+lossval = loss(p3,prob,ww,u0);
 loss3 = lossval[1]
 pred3 = lossval[2]
 
 # final plot with third dimension and lines
 third = if n >= 3 true else false end
-callback(p3,loss3,pred3; show_lines=true, show_third=third)
+callback(p3,loss3,pred3,prob,ww,u0; show_lines=true, show_third=third)
 
 # out_file = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
 jldsave(out_file; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
