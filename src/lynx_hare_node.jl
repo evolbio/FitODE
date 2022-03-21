@@ -1,5 +1,5 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
-		Statistics, Distributions, JLD2, Dates, Random
+		Statistics, Distributions, JLD2, Dates, Random, Printf
 
 # See git version 0203ed1, which used random seeding of initial values
 # for dummy dimensions. When using random seeding, need to run fitting
@@ -34,6 +34,7 @@ rtol = 1e-2			# relative tolerance for ODE solver
 atol = 1e-3			# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 500		# max iterates for each incremental learning step
+print_grad = true	# show gradient on terminal, requires significant overhead
 csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/output.jld2"
 seed_file = "/Users/steve/Desktop/seed.julia"
@@ -158,8 +159,15 @@ end
 # Make a neural net with a NeuralODE layer
 dudt2 = FastChain(FastDense(n, layer_size, activation), FastDense(layer_size, n))
 
-callback = function (p, l, pred; doplot = true, show_lines = false, show_third = false)
-  display(l)
+callback = function (p, l, pred, prob, w, u_init; doplot = true, show_lines = false,
+						show_third = false)
+  if (print_grad)
+  	grad = gradient(p->loss(p,prob,w,u_init)[1], p)[1]
+  	gnorm = sqrt(sum(abs2, grad))
+  	println(@sprintf("%5.3e; %5.3e", l, gnorm))
+  else
+  	display(l)
+  end
   # plot current prediction against data
   len = length(pred[1,:])
   ts = tsteps[1:len]
@@ -186,7 +194,7 @@ function loss(p, prob, w, u_init)
 	pred_length = length(pred[1,:])
 	if pred_length != length(w[1,:]) println("Mismatch") end
 	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
-	return loss, pred_all
+	return loss, pred_all, prob, w, u_init
 end
 
 function weights(a; b=10, trunc=1e-4) 
