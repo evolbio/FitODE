@@ -58,6 +58,11 @@ function loss(p, prob, u_init)
 	return loss
 end
 
+# For lynx & hare, gradients are large even near best fit
+# and so this may not work when using previously fitted
+# parameters. I have not worked with this code to check
+# if can be used effectively or if it might be better
+# to use alternative bayesian fitting such as NUTS.
 sgld(∇L, θᵢ, t, a = 2.5e-3, b = 0.05, γ = 0.35) = begin
     ϵ = a*(b + t)^-γ
     η = ϵ.*randn(size(θᵢ))
