@@ -8,26 +8,59 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # See lynx_hare_node.jl for comments on many aspects of this code. Much
 # shared with that file.
 
+# activation functions for ode!, declare before choosing activate in settings
+swish(x) = x ./ (exp.(-x) .+ 1.0)
+sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
+
+###################### Start of settings section ######################
+
 # number of variables to track in ODE, first two are hare and lynx
-n = 3 # must be >= 2
+n = 4 # must be >= 2
 nsqr = n*n
 wt_trunc = 1e-2		# truncation for weights
-rtol = 1e-2			# relative tolerance for ODE solver
-atol = 1e-3			# absolute tolerance for ODE solver
+# larger tolerances are faster but errors make gradient descent more challenging
+rtol = 1e-10		# relative tolerance for ODE solver
+atol = 1e-12		# absolute tolerance for ODE solver
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 500		# max iterates for each incremental learning step
 print_grad = true	# show gradient on terminal, requires significant overhead
 csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv"
-out_file = "/Users/steve/Desktop/output.jld2"
-seed_file = "/Users/steve/Desktop/seed.julia"
+now_name = Dates.format(now(),"yyyymmdd_HHMMSS")
+out_file = "/Users/steve/Desktop/" * now_name * ".jld2"
+rnd_file = "/Users/steve/Desktop/" * now_name * ".rnd"
 
 generate_rand_seed = true
 rand_seed = 0x695db8870561193d
+
+wt_base = 1.1		# good default is 1.1
+wt_steps = Int(ceil(log(500)/log(wt_base)))
+wt_trunc = 1e-2		# truncation for weights
+
+# would be worthwhile to experiment with various solvers
+# see https://diffeq.sciml.ai/stable/solvers/ode_solve/
+solver = Rodas4P() 	# TRBDF2() for large tol, Tsit5() faster? but check instability
+
+# Activation function for ode!
+# tanh seems to give good fit, perhaps best fit, however, gradient does not
+# properly decline near best fit and so cannot use SGLD bayes methods, which
+# require small gradient near fixed point; identity fit not as good but
+# gradient declines properly near local optimum
+
+activate = identity	# use one of identity, tanh, sigmoid, swish
+
+use_splines = true
+# if using splines, increase data to pts per year by interpolation
+pts = 2
+use_gauss_filter = true	# smooth the splines by gauss filtering
+filter_sd = 1.2
+
+###################### End of settings section ######################
+ 
 function set_rand_seed(gen_rand_seed=generate_rand_seed, new_seed_val=rand_seed)
 	if gen_rand_seed
 		seed_val = rand(UInt)
 		Random.seed!(seed_val)
-		open("/Users/steve/Desktop/rand.out", "w") do file
+		open(rnd_file, "w") do file
 			write(file, string(seed_val))
 		end
 		println("New random seed is ", seed_val)
@@ -37,27 +70,15 @@ function set_rand_seed(gen_rand_seed=generate_rand_seed, new_seed_val=rand_seed)
 	end
 end
 
-wt_base = 1.1		# good default is 1.1
-wt_steps = Int(ceil(log(500)/log(wt_base)))
-wt_trunc = 1e-2		# truncation for weights
-
-solver = TRBDF2()
-
-use_splines = true
-# if using splines, increase data to pts per year by interpolation
-pts = 2
-use_gauss_filter = true	# smooth the splines by gauss filtering
-filter_sd = 1.2
- 
 df = CSV.read(csv_file, DataFrame);
-ode_data = permutedims(Array{Float32}(df[:,2:3]));
+ode_data = permutedims(Array{Float64}(df[:,2:3]));
 
 # take log and then normalize by average
 ode_data = log.(ode_data)
 ode_data = ode_data .- mean(ode_data)
 
 datasize = length(ode_data[1,:]) # Number of time points
-tspan = (0.0f0, Float32(datasize-1)) # Time range
+tspan = (0.0f0, Float64(datasize-1)) # Time range
 tsteps = range(tspan[1], tspan[2], length = datasize) # Split to equal steps
 
 # fit spline to data and use fitted data to train
@@ -81,18 +102,11 @@ end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
 # add additional initial values for dummy dimensions
-u0 = vcat(u0,randn(Float32,n-2))
+u0 = vcat(u0,randn(Float64,n-2))
 
-swish(x) = x ./ (exp.(-x) .+ 1.0)
-sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
-
-# tanh seems to work best
 function ode!(du, u, p, t)
 	s = reshape(p[1:nsqr], n, n)
-	du .= tanh.(s*u .- p[nsqr+1:end])
-	#du .= sigmoid(s*u .- p[nsqr+1:end])
-	#du .= swish(s*u .- p[nsqr+1:end])
-	#du .= s*u .- p[nsqr+1:end]
+	du .= activate.(s*u .- p[nsqr+1:end])
 end
 
 callback = function (p, l, pred, prob, w, u_init; doplot = true, show_lines = false,
@@ -189,7 +203,6 @@ pred3 = lossval[2]
 third = if n >= 3 true else false end
 callback(p3,loss3,pred3,prob,ww,u0; show_lines=true, show_third=third)
 
-# out_file = Dates.format(now(),"yyyymmdd_HHMM") * ".jld2"
 jldsave(out_file; p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
 # Also, could do fit back to ode_data_orig after fitting to splines
