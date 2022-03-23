@@ -9,6 +9,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 # shared with that file.
 
 now_name = Dates.format(now(),"yyyymmdd_HHMMSS")
+proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 
 ###################### Start of settings section ######################
 
@@ -24,9 +25,12 @@ atol = 1e-12,		# absolute tolerance for ODE solver
 adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 2,		# max iterates for each incremental learning step
 print_grad = true,	# show gradient on terminal, requires significant overhead
-csv_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/input/lynx_hare_data.csv",
+
+csv_file = "$proj_dir/input/lynx_hare_data.csv",
 out_file = "/Users/steve/Desktop/" * now_name * ".jld2",
 rnd_file = "/Users/steve/Desktop/" * now_name * ".rnd",
+
+git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String)),
 
 generate_rand_seed = true,
 rand_seed = 0x695db8870561193d,
