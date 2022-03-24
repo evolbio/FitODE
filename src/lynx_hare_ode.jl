@@ -23,7 +23,7 @@ n = 4, # must be >= 2
 rtol = 1e-10,		# relative tolerance for ODE solver
 atol = 1e-12,		# absolute tolerance for ODE solver
 adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
-max_it = 2,		# max iterates for each incremental learning step
+max_it = 500,		# max iterates for each incremental learning step
 print_grad = true,	# show gradient on terminal, requires significant overhead
 
 csv_file = "$proj_dir/input/lynx_hare_data.csv",
