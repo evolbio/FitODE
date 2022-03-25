@@ -1,4 +1,7 @@
 # Read in first part of lynx_hare_ode.jl
+# Using pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
+# and code in https://github.com/RajDandekar/MSML21_BayesianNODE
+# theory in Li15.pdf
 
 # read parameters
 in_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/output/ode/n3-1-identity.jld2"
@@ -11,10 +14,20 @@ dt = load(in_file)
 #train_prob = NeuralODE(dudt, (0., train_end_time), solver, saveat = tsteps[1:train_end_index],
 #				reltol = rtol, abstol = atol)
 
-sgld(∇L, θᵢ, t; a = 2.5e-3, b = 0.05, γ = 0.35) = begin
+# Julia code at https://diffeqflux.sciml.ai/stable/examples/BayesianNODE_SGLD/
+# may be incorrect, uses ϵ instead of sqrt(ϵ) for η, variance should be ϵ
+function sgld(∇L, θᵢ, t; a = 2.5e-3, b = 0.05, γ = 0.35)
     ϵ = a*(b + t)^-γ
-    η = ϵ.*randn(size(θᵢ))
+    η = sqrt(ϵ).*randn(size(θᵢ))
     Δθᵢ = .5ϵ*∇L + η
+    θᵢ .-= Δθᵢ
+end
+
+# precondition pSGLD, weight by m, see Li15.pdf, with m=G in their notation
+function p_sgld(∇L, θᵢ, t, m; a = 2.5e-3, b = 0.05, γ = 0.35)
+    ϵ = a*(b + t)^-γ
+    η = sqrt.(ϵ.*m).*randn(size(θᵢ))
+    Δθᵢ = .5ϵ*(∇L.*m) + η
     θᵢ .-= Δθᵢ
 end
 
@@ -38,29 +51,47 @@ parameters = []
 losses = Float64[]
 grad_norm = Float64[]
 
-sgld_b=3e5;
+sgld_a=1e-1;
+sgld_b=1e4;
 
-#warmup
-for t in 1:3000
+# setup
+
+beta = 0.9;
+λ =1e-8;
+
+# do one update with m=1e-3, because very small initial gradients cause problem
+p_sgld(grad, θ, 1, 1e-3.*ones(length(θ)); a=sgld_a, b=sgld_b)
+
+grd = gradient(p -> loss(p, prob, ww, u0)[1], θ)[1];
+precond = grd .* grd;
+
+warmup = 20000
+total = 40000
+for t in 1:total
 	if t % 100 == 0 println("t = " , t) end
 	grad = gradient(p -> loss(p, prob, ww, u0)[1], θ)[1]
-	sgld(grad, θ, t, b=sgld_b)
-	println(loss(θ, prob, ww, u0)[1])
+	# precondition gradient, normalizing magnitude in each dimension
+	precond *= beta
+	precond += (1-beta)*(grad .* grad)
+	m = 1 ./ (λ .+ sqrt.(precond))
+	p_sgld(grad, θ, t, m; a=sgld_a, b=sgld_b)
+	# start collecting statistics after initial warmup period
+	if t > warmup
+		tmp = deepcopy(θ)
+		curr_loss = loss(θ, prob, ww, u0)[1]
+		append!(losses, curr_loss)
+		append!(grad_norm, sum(abs2, grad))
+		append!(parameters, [tmp])
+		println(curr_loss)
+	else
+		println(loss(θ, prob, ww, u0)[1])
+	end
 end
 
-for t in 3000:5000
-	if t % 100 == 0 println("t = " , t) end
-	grad = gradient(p -> loss(p, prob, ww, u0)[1], θ)[1]
-	sgld(grad, θ, t, b=sgld_b)
-	tmp = deepcopy(θ)
-	curr_loss = loss(θ, prob, ww, u0)[1]
-	append!(losses, curr_loss)
-	append!(grad_norm, sum(abs2, grad))
-	append!(parameters, [tmp])
-	println(curr_loss)
-end
+# Plotting. First check ϵ values of sgld
+# Then check on convergence to min and sampling of posterior
 
-# Plotting. First step is to check on convergence to min and sampling of posterior
+plot([sgld_test(i; a=sgld_a, b=sgld_b) for i=warmup:10:total], yscale=:log10)
 
 plot(losses, yscale = :log10)
 plot(grad_norm, yscale =:log10)
@@ -75,8 +106,19 @@ using StatsBase
 # see https://discourse.julialang.org/t/how-to-convert-vector-of-vectors-to-matrix/72609/14
 pmatrix = reduce(hcat,parameters)';
 
+# posterior distn for 8th parameter
+density(pmatrix[:,8])
+# compare density between time periods to see if converging
+obs = length(pmatrix[:,1])
+first_half = Int(floor(obs/2))
+
+function plot_posterior(pindex)
+	density(pmatrix[1:first_half,pindex])
+	density!(pmatrix[first_half+1:end,pindex])
+end
+
 # vector with each entry as a vector of autocorr vals 
-auto=[autocor(pmatrix[:,i],1:10) for i=1:length(pmatrix[1,:])];
+auto=[autocor(pmatrix[:,i],1:50) for i=1:length(pmatrix[1,:])];
 # matrix with each row for parameter and col for autocorr vals
 amatrix = reduce(hcat,auto)';
 
@@ -86,4 +128,8 @@ amatrix = reduce(hcat,auto)';
 # sgld ϵ such that autocorr remains small, allowing best convergence to 
 # near minimum cost and yet still good stochastic sampling of posterior
 # if small number of parameters, use histogram(), else use density()
+
+# distn for 10th lag over all parameters
 histogram(amatrix[:,10])
+# autocorr plot for ith parameter
+plot(amatrix[3,:])

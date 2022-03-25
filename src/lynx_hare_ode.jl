@@ -18,7 +18,7 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 S = (
 
 # number of variables to track in ODE, first two are hare and lynx
-n = 4, # must be >= 2
+n = 3, # must be >= 2
 # larger tolerances are faster but errors make gradient descent more challenging
 rtol = 1e-10,		# relative tolerance for ODE solver
 atol = 1e-12,		# absolute tolerance for ODE solver
