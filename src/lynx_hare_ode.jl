@@ -17,7 +17,7 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 
 S = (
 
-# number of variables to track in ODE, first two are hare and lynx
+# number of variables to track in (N)ODE, first two are hare and lynx
 n = 3, # must be >= 2
 # larger tolerances are faster but errors make gradient descent more challenging
 rtol = 1e-10,		# relative tolerance for ODE solver
@@ -26,6 +26,7 @@ adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change
 max_it = 500,		# max iterates for each incremental learning step
 print_grad = true,	# show gradient on terminal, requires significant overhead
 
+start_time = now_name,
 csv_file = "$proj_dir/input/lynx_hare_data.csv",
 out_file = "/Users/steve/Desktop/" * now_name * ".jld2",
 rnd_file = "/Users/steve/Desktop/" * now_name * ".rnd",
@@ -40,13 +41,13 @@ wt_trunc = 1e-2,	# truncation for weights
 
 # would be worthwhile to experiment with various solvers
 # see https://diffeq.sciml.ai/stable/solvers/ode_solve/
-solver = Rodas4P(), # TRBDF2() for large tol, Tsit5() faster? but check instability
+solver = Rodas4P(), # TRBDF2() for large tol; Tsit5() faster? but check instability
 
-# Activation function for ode!
-# tanh seems to give good fit, perhaps best fit, however, gradient does not
-# properly decline near best fit and so cannot use SGLD bayes methods, which
+# Activation function:
+# tanh seems to give good fit, perhaps best fit, and maybe overfit
+# however, gradient does not decline near best fit, may limit methods that
 # require small gradient near fixed point; identity fit not as good but
-# gradient declines properly near local optimum
+# gradient declines properly near local optimum with BFGS()
 
 activate = 1, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
 
@@ -102,9 +103,9 @@ if S.use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-# add additional initial values for dummy dimensions
-# alternatively, can optimize initial conditions for dummy dimensions,
-# search git log for old code
+# add additional initial values for dummy dimensions.
+# Alternatively, can optimize initial conditions for dummy dimensions
+# by adding those values as optimized parameters, search git log for old code.
 u0 = vcat(u0,randn(Float64,n-2))
 
 # activation functions for ode!

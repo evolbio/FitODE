@@ -27,7 +27,7 @@ function sgld(∇L, θᵢ, t; a = 2.5e-3, b = 0.05, γ = 0.35)
 end
 
 # precondition pSGLD, weight by m, see Li15.pdf, with m=G in their notation
-# corrected the code in https://github.com/RajDandekar/MSML21_BayesianNODE, see above
+# corrected the bug in https://github.com/RajDandekar/MSML21_BayesianNODE, see above
 function p_sgld(∇L, θᵢ, t, m; a = 2.5e-3, b = 0.05, γ = 0.35)
     ϵ = a*(b + t)^-γ
     η = sqrt.(ϵ.*m).*randn(size(θᵢ))
@@ -91,6 +91,9 @@ for t in 1:total
 		println(loss(θ, prob, ww, u0)[1])
 	end
 end
+
+# save values
+jldsave("/Users/steve/Desktop/" * S.start_time * "bayes.jld2"; parameters, losses, grad_norm)
 
 ###############################################################################
 # Plotting. First check ϵ values of sgld
