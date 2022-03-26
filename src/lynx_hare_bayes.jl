@@ -1,7 +1,10 @@
 # Read in first part of lynx_hare_ode.jl
 # Using pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
-# and code in https://github.com/RajDandekar/MSML21_BayesianNODE
-# theory in Li15.pdf
+# and code in https://github.com/RajDandekar/MSML21_BayesianNODE.
+# Theory in Li15.pdf, however, had to correct online code examples after reading
+# original literature, because examples weighted noise term incorrectly.
+# Code for SGLD in https://diffeqflux.sciml.ai/stable/examples/BayesianNODE_SGLD/
+# also weights noise incorrectly, weight should be sqrt of ϵ.
 
 # read parameters
 in_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/output/ode/n3-1-identity.jld2"
@@ -24,6 +27,7 @@ function sgld(∇L, θᵢ, t; a = 2.5e-3, b = 0.05, γ = 0.35)
 end
 
 # precondition pSGLD, weight by m, see Li15.pdf, with m=G in their notation
+# corrected the code in https://github.com/RajDandekar/MSML21_BayesianNODE, see above
 function p_sgld(∇L, θᵢ, t, m; a = 2.5e-3, b = 0.05, γ = 0.35)
     ϵ = a*(b + t)^-γ
     η = sqrt.(ϵ.*m).*randn(size(θᵢ))
@@ -88,29 +92,42 @@ for t in 1:total
 	end
 end
 
+###############################################################################
 # Plotting. First check ϵ values of sgld
-# Then check on convergence to min and sampling of posterior
+# Then check on convergence to min and sampling of posterior for loss values
+# Goal here is uncertainty for trajectories, so sufficient to look at 
+# posterior distribution of loss values to check for sampling convergence
 
 plot([sgld_test(i; a=sgld_a, b=sgld_b) for i=warmup:10:total], yscale=:log10)
 
 plot(losses, yscale = :log10)
 plot(grad_norm, yscale =:log10)
 
-using StatsPlots
+using StatsPlots, StatsBase
+
 density(losses)
 
-using StatsBase
+# compare density between time periods to see if converging
+obs = length(pmatrix[:,1])
+first_half = Int(floor(obs/2))
+
+density(losses[1:first_half])
+density!(losses[first_half+1:end])
+
+plot(autocor(losses,1:100))
+
+###############################################################################
+# Look at individual parameters. Typically not necessary for this application
+# because goal is to obtain uncertainty estimate for trajectories, not for
+# parameters, so looking at loss as above is sufficient
 
 # parameters is a vector with each entry for time as a vector of parameters
 # this makes a matrix with rows for time and cols for parameter values
 # see https://discourse.julialang.org/t/how-to-convert-vector-of-vectors-to-matrix/72609/14
 pmatrix = reduce(hcat,parameters)';
 
-# posterior distn for 8th parameter
+# posterior distn for 8th parameter, choose index as needed
 density(pmatrix[:,8])
-# compare density between time periods to see if converging
-obs = length(pmatrix[:,1])
-first_half = Int(floor(obs/2))
 
 function plot_posterior(pindex)
 	density(pmatrix[1:first_half,pindex])
