@@ -17,8 +17,13 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 
 S = (
 
+use_node = true,	# switch between NODE and ODE
+layer_size = 20,	# size of layers for NODE
+
 # number of variables to track in (N)ODE, first two are hare and lynx
-n = 3, # must be >= 2
+n = 3, 					# must be >= 2, number dummy variables is n-2
+opt_dummy_u0 = false,	# optimize dummy init values instead of using rand values
+
 # larger tolerances are faster but errors make gradient descent more challenging
 rtol = 1e-10,		# relative tolerance for ODE solver
 atol = 1e-12,		# absolute tolerance for ODE solver
@@ -29,7 +34,6 @@ print_grad = true,	# show gradient on terminal, requires significant overhead
 start_time = now_name,
 csv_file = "$proj_dir/input/lynx_hare_data.csv",
 out_file = "/Users/steve/Desktop/" * now_name * ".jld2",
-rnd_file = "/Users/steve/Desktop/" * now_name * ".rnd",
 
 git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String)),
 
@@ -61,8 +65,7 @@ filter_sd = 1.2
 ###################### End of settings values ######################
 
 wt_steps = Int(ceil(log(500)/log(S.wt_base)))
-n = S.n
-nsqr = n*n
+nsqr = S.n*S.n
 
 ###################### End of setting setup #######################
 
@@ -103,26 +106,56 @@ if S.use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-# add additional initial values for dummy dimensions.
-# Alternatively, can optimize initial conditions for dummy dimensions
-# by adding those values as optimized parameters, search git log for old code.
-u0 = vcat(u0,randn(Float64,n-2))
+if (S.optimize_dummy_u0 == false) u0 = vcat(u0,randn(Float64,n-2))
 
-# activation functions for ode!
-swish(x) = x ./ (exp.(-x) .+ 1.0)
-sigmoid(x) = 1.0 ./ (exp.(-x) .+ 1.0)
-activate = if (S.activate == 1) identity elseif (S.activate == 2) tanh
-				elseif (S.activate == 3) sigmoid else swish end
-
-function ode!(du, u, p, t)
-	s = reshape(p[1:nsqr], n, n)
-	du .= activate.(s*u .- p[nsqr+1:end])
+# If optimizing initial conditions for dummy dimensions, then use parameters p 
+# starting at initial condition u0, ie, u0 for dummy dimensions are first entries
+# of p
+if S.use_node
+	if S.optimize_dummy_u0
+		function predict(p, prob, u_init)
+		  u_new = vcat(u_init,p[1:S.n-2])
+		  Array(prob(u_new, p[S.n-1:end]))
+		end
+	else
+		function predict(p, prob, u_init)
+		  Array(prob(u_init, p))
+		end
+	end
+else # ode instead of node, resove u_init and p in prob arg
+	function predict(p, prob, u_init)
+	  solve(prob, S.solver, p=p)
+	end
 end
 
-callback = function (p, l, pred, prob, w, u_init; doplot = true, show_lines = false,
+activate = if (S.activate == 1) identity elseif (S.activate == 2) tanh
+					elseif (S.activate == 3) sigmoid else swish end
+if S.use_node
+	dudt = FastChain(FastDense(S.n, S.layer_size, activate), FastDense(S.layer_size, S.n))
+else
+	function ode!(du, u, p, t)
+		s = reshape(p[1:nsqr], S.n, S.n)
+		du .= activate.(s*u .- p[nsqr+1:end])
+	end
+end
+
+function problem(p, u_init, tspn, ts)
+	if S.use_node
+		prob = NeuralODE(dudt, tspn, S.solver, saveat = ts, reltol = S.rtol, abstol = S.atol)
+	else
+		if S.optimize_dummy_u0
+			prob = ODEProblem(ode!, vcat(u_init,p[1:S.n-2]), tspn, p[S.n-1:end],
+						saveat = ts, reltol = S.rtol, abstol = S.atol)
+		else
+			prob = ODEProblem(ode!, u_init, tspn, p, saveat = ts, reltol = S.rtol, abstol = S.atol)
+	end
+	return prob
+end
+
+callback = function (p, l, pred, prob, u_init, w, tspn, tstp; doplot = true, show_lines = false,
 						show_third = false)
   if (S.print_grad)
-  	grad = gradient(p->loss(p,prob,w,u_init)[1], p)[1]
+  	grad = gradient(p->loss(p,u_init,w,tspn,tstp)[1], p)[1]
   	gnorm = sqrt(sum(abs2, grad))
   	println(@sprintf("%5.3e; %5.3e", l, gnorm))
   else
@@ -148,13 +181,14 @@ callback = function (p, l, pred, prob, w, u_init; doplot = true, show_lines = fa
   return false
 end
 
-function loss(p, prob, w, u_init)
-	pred_all = solve(prob, S.solver, p=p)
+function loss(p, u_init, w, tspn, tstp)
+	prob = problem(p, u_init, tspn, tstp)
+	pred_all = predict(p, prob, u_init)
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
 	pred_length = length(pred[1,:])
 	if pred_length != length(w[1,:]) println("Mismatch") end
 	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
-	return loss, pred_all, prob, w, u_init
+	return loss, pred_all, prob, u_init, w, tspn, tstp
 end
 
 function weights(a; b=10, trunc=S.wt_trunc) 
@@ -170,52 +204,65 @@ end
 
 beta_a = 1:1:wt_steps
 set_rand_seed();
-p = 0.1*rand(nsqr + n);	# n^2 matrix plus vector n for individual growth
+if !S.use_node p_init = 0.1*rand(nsqr + S.n) end;	# n^2 matrix plus vector n for individual growth
 for i in 1:length(beta_a)
 	global result
 	println(beta_a[i])
 	w = weights(S.wt_base^beta_a[i]; trunc=S.wt_trunc)
 	last_time = tsteps[length(w[1,:])]
-	prob = ODEProblem(ode!, u0, tspan, p, saveat = tsteps[tsteps .<= last_time],
-					reltol = S.rtol, abstol = S.atol)
-	p = if (i == 1) prob.p else result.u end
-	result = DiffEqFlux.sciml_train(p -> loss(p,prob,w,u0), p,
+	ts = tsteps[tsteps .<= last_time]
+	# increase p length by adding u0 for dummy dimensions
+	if (i == 1)
+		if S.use_node
+			prob = NeuralODE(dudt, (0.0,last_time), S.solver, saveat = ts,
+						reltol = S.rtol, abstol = S.atol)
+			p = prob.p
+		else
+			p = S.optimize_dummy_u0 ? vcat(randn(S.n-2),p_init) : p_init
+	else
+		p = result.u
+	end
+	result = DiffEqFlux.sciml_train(p -> loss(p,u_0,w,(0,last_time),ts), p,
 					ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
 end
 
 # do additional optimization round with equal weights at all points
-prob = ODEProblem(ode!, u0, tspan, p, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
 ww = ones(2,length(tsteps))
 p1 = result.u
-lossval = loss(p1,prob,ww,u0);
+lossval = loss(p1,u_0,ww,tspan,tsteps);
 loss1 = lossval[1]
 pred1 = lossval[2]
 
-result2 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0), result.u, ADAM(S.adm_learn);
+result2 = DiffEqFlux.sciml_train(p -> loss(p,u_0,ww,tspan,tsteps), result.u, ADAM(S.adm_learn);
 			cb = callback, maxiters=S.max_it)
 
 p2 = result2.u
-lossval = loss(p2,prob,ww,u0);
+lossval = loss(p2,u_0,ww,tspan,tsteps);
 loss2 = lossval[1]
 pred2 = lossval[2]
 
-grad = gradient(p->loss(p,prob,ww,u0)[1], p2)
+grad = gradient(p->loss(p,u_0,ww,tspan,tsteps)[1], p2)
 
-result3 = DiffEqFlux.sciml_train(p -> loss(p,prob,ww,u0),p2,BFGS(),
+result3 = DiffEqFlux.sciml_train(p -> loss(p,u_0,ww,tspan,tsteps),p2,BFGS(),
 			cb = callback, maxiters=S.max_it)
 
 p3 = result3.u
-lossval = loss(p3,prob,ww,u0);
+lossval = loss(p3,u_0,ww,tspan,tsteps);
 loss3 = lossval[1]
 pred3 = lossval[2]
 
 # final plot with third dimension and lines
 third = if n >= 3 true else false end
-callback(p3,loss3,pred3,prob,ww,u0; show_lines=true, show_third=third)
+
+prob = problem(p3, u0, tspan, tsteps)
+callback(p3,loss3,pred3,prob,u_0,ww,tspan,tsteps); show_lines=true, show_third=third)
 
 jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
-# Also, could do fit back to ode_data_orig after fitting to splines
+# Also, could do fit back to ode_data_orig after fitting to splines or gaussian filter
+
+# Could add code for pruning model (regularization) by adding costs to parameters
+# and so reducing model size, perhaps searching for minimally sufficient model
 			
 # dt = load(out_file)
 # dt["pred1"] # for prediction data for first set
