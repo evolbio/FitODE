@@ -37,7 +37,7 @@ out_file = "/Users/steve/Desktop/" * now_name * ".jld2",
 
 git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String)),
 
-generate_rand_seed = true,
+generate_rand_seed = false,
 rand_seed = 0x695db8870561193d,
 
 wt_base = 1.1,		# good default is 1.1
@@ -45,7 +45,8 @@ wt_trunc = 1e-2,	# truncation for weights
 
 # would be worthwhile to experiment with various solvers
 # see https://diffeq.sciml.ai/stable/solvers/ode_solve/
-solver = Rodas4P(), # TRBDF2() for large tol; Tsit5() faster? but check instability
+# TRBDF2() for large tol, Rodas4P() for small tol; Tsit5() faster? but check instability
+solver = Tsit5(), 
 
 # Activation function:
 # tanh seems to give good fit, perhaps best fit, and maybe overfit
@@ -53,7 +54,7 @@ solver = Rodas4P(), # TRBDF2() for large tol; Tsit5() faster? but check instabil
 # require small gradient near fixed point; identity fit not as good but
 # gradient declines properly near local optimum with BFGS()
 
-activate = 1, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
+activate = 2, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
 
 use_splines = true,
 # if using splines, increase data to pts per year by interpolation
@@ -106,13 +107,19 @@ if S.use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
-if (S.optimize_dummy_u0 == false) u0 = vcat(u0,randn(Float64,n-2))
+if (S.opt_dummy_u0 == false) u0 = vcat(u0,randn(Float64,S.n-2)) end
+
+activate = if (S.activate == 1) identity elseif (S.activate == 2) tanh
+					elseif (S.activate == 3) sigmoid else swish end
 
 # If optimizing initial conditions for dummy dimensions, then use parameters p 
 # starting at initial condition u0, ie, u0 for dummy dimensions are first entries
 # of p
 if S.use_node
-	if S.optimize_dummy_u0
+	dudt = FastChain(FastDense(S.n, S.layer_size, activate), FastDense(S.layer_size, S.n))
+	problem(p, u_init, tspn, ts) = 
+		NeuralODE(dudt, tspn, S.solver, saveat = ts, reltol = S.rtol, abstol = S.atol)
+	if S.opt_dummy_u0
 		function predict(p, prob, u_init)
 		  u_new = vcat(u_init,p[1:S.n-2])
 		  Array(prob(u_new, p[S.n-1:end]))
@@ -126,34 +133,22 @@ else # ode instead of node, resove u_init and p in prob arg
 	function predict(p, prob, u_init)
 	  solve(prob, S.solver, p=p)
 	end
-end
-
-activate = if (S.activate == 1) identity elseif (S.activate == 2) tanh
-					elseif (S.activate == 3) sigmoid else swish end
-if S.use_node
-	dudt = FastChain(FastDense(S.n, S.layer_size, activate), FastDense(S.layer_size, S.n))
-else
 	function ode!(du, u, p, t)
 		s = reshape(p[1:nsqr], S.n, S.n)
 		du .= activate.(s*u .- p[nsqr+1:end])
 	end
-end
-
-function problem(p, u_init, tspn, ts)
-	if S.use_node
-		prob = NeuralODE(dudt, tspn, S.solver, saveat = ts, reltol = S.rtol, abstol = S.atol)
+	if S.opt_dummy_u0
+		problem(p, u_init, tspn, ts) = ODEProblem(ode!, vcat(u_init,p[1:S.n-2]),
+			tspn, p[S.n-1:end], saveat = ts, reltol = S.rtol, abstol = S.atol)
 	else
-		if S.optimize_dummy_u0
-			prob = ODEProblem(ode!, vcat(u_init,p[1:S.n-2]), tspn, p[S.n-1:end],
-						saveat = ts, reltol = S.rtol, abstol = S.atol)
-		else
-			prob = ODEProblem(ode!, u_init, tspn, p, saveat = ts, reltol = S.rtol, abstol = S.atol)
+		problem(p, u_init, tspn, ts) = 
+			ODEProblem(ode!, u_init, tspn, p, saveat = ts, reltol = S.rtol, abstol = S.atol)
 	end
-	return prob
 end
 
 callback = function (p, l, pred, prob, u_init, w, tspn, tstp; doplot = true, show_lines = false,
 						show_third = false)
+	println("Callback")
   if (S.print_grad)
   	grad = gradient(p->loss(p,u_init,w,tspn,tstp)[1], p)[1]
   	gnorm = sqrt(sum(abs2, grad))
@@ -182,11 +177,17 @@ callback = function (p, l, pred, prob, u_init, w, tspn, tstp; doplot = true, sho
 end
 
 function loss(p, u_init, w, tspn, tstp)
+	println("OK")
 	prob = problem(p, u_init, tspn, tstp)
+	println("OK")
 	pred_all = predict(p, prob, u_init)
+	println("OK")
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
+	println("OK")
 	pred_length = length(pred[1,:])
+	println("OK")
 	if pred_length != length(w[1,:]) println("Mismatch") end
+	println("OK")
 	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
 	return loss, pred_all, prob, u_init, w, tspn, tstp
 end
@@ -218,36 +219,44 @@ for i in 1:length(beta_a)
 						reltol = S.rtol, abstol = S.atol)
 			p = prob.p
 		else
-			p = S.optimize_dummy_u0 ? vcat(randn(S.n-2),p_init) : p_init
+			p = S.opt_dummy_u0 ? vcat(randn(S.n-2),p_init) : p_init
+		end
 	else
 		p = result.u
 	end
-	result = DiffEqFlux.sciml_train(p -> loss(p,u_0,w,(0,last_time),ts), p,
+
+	println("OK1")
+	println(loss(p,u0,w,(0,last_time),ts)[1])
+  	grad = gradient(p->loss(p,u0,w,(0,last_time),ts)[1], p)[1]
+	println("OK2")
+  	println(sqrt(sum(abs2, grad)))
+
+	result = DiffEqFlux.sciml_train(p -> loss(p,u0,w,(0,last_time),ts), p,
 					ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
 end
 
 # do additional optimization round with equal weights at all points
 ww = ones(2,length(tsteps))
 p1 = result.u
-lossval = loss(p1,u_0,ww,tspan,tsteps);
+lossval = loss(p1,u0,ww,tspan,tsteps);
 loss1 = lossval[1]
 pred1 = lossval[2]
 
-result2 = DiffEqFlux.sciml_train(p -> loss(p,u_0,ww,tspan,tsteps), result.u, ADAM(S.adm_learn);
+result2 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,tspan,tsteps), result.u, ADAM(S.adm_learn);
 			cb = callback, maxiters=S.max_it)
 
 p2 = result2.u
-lossval = loss(p2,u_0,ww,tspan,tsteps);
+lossval = loss(p2,u0,ww,tspan,tsteps);
 loss2 = lossval[1]
 pred2 = lossval[2]
 
-grad = gradient(p->loss(p,u_0,ww,tspan,tsteps)[1], p2)
+grad = gradient(p->loss(p,u0,ww,tspan,tsteps)[1], p2)
 
-result3 = DiffEqFlux.sciml_train(p -> loss(p,u_0,ww,tspan,tsteps),p2,BFGS(),
+result3 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,tspan,tsteps),p2,BFGS(),
 			cb = callback, maxiters=S.max_it)
 
 p3 = result3.u
-lossval = loss(p3,u_0,ww,tspan,tsteps);
+lossval = loss(p3,u0,ww,tspan,tsteps);
 loss3 = lossval[1]
 pred3 = lossval[2]
 
@@ -255,7 +264,7 @@ pred3 = lossval[2]
 third = if n >= 3 true else false end
 
 prob = problem(p3, u0, tspan, tsteps)
-callback(p3,loss3,pred3,prob,u_0,ww,tspan,tsteps); show_lines=true, show_third=third)
+callback(p3,loss3,pred3,prob,u0,ww,tspan,tsteps); show_lines=true, show_third=third)
 
 jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
