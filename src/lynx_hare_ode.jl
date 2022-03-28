@@ -1,6 +1,10 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates, Random, Printf
 
+# This version combines ODE and NODE into single code base, with options to
+# switch between ODE and NODE. However, performance is very slow. Not sure
+# what creates speed limitation.
+
 # LV ODE with extra squared term for each "species". Data for 2D hare
 # and lynx. Better fit using n=3 or 4. For n=5 seems to be too high for
 # easy fit. NODE with n=3 fits better.
@@ -177,17 +181,12 @@ callback = function (p, l, pred, prob, u_init, w, tspn, tstp; doplot = true, sho
 end
 
 function loss(p, u_init, w, tspn, tstp)
-	println("OK")
 	prob = problem(p, u_init, tspn, tstp)
-	println("OK")
 	pred_all = predict(p, prob, u_init)
-	println("OK")
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
-	println("OK")
 	pred_length = length(pred[1,:])
-	println("OK")
 	if pred_length != length(w[1,:]) println("Mismatch") end
-	println("OK")
+	println("OK loss")
 	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
 	return loss, pred_all, prob, u_init, w, tspn, tstp
 end
