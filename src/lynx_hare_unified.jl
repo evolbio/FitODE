@@ -25,7 +25,7 @@ use_node = true,	# switch between NODE and ODE
 layer_size = 20,	# size of layers for NODE
 
 # number of variables to track in (N)ODE, first two are hare and lynx
-n = 3, 					# must be >= 2, number dummy variables is n-2
+n = 4, 					# must be >= 2, number dummy variables is n-2
 opt_dummy_u0 = true,	# optimize dummy init values instead of using rand values
 
 # Larger tolerances are faster but errors make gradient descent more challenging
@@ -241,7 +241,13 @@ lossval = loss(p2,u0,ww,prob);
 loss2 = lossval[1]
 pred2 = lossval[2]
 
-grad = gradient(p->loss(p,u0,ww,prob)[1], p2)
+# check grad if of interest
+grad = gradient(p->loss(p,u0,ww,prob)[1], p2);
+
+# final plot with third dimension and lines
+third = if S.n >= 3 true else false end
+
+callback(p2,loss2,pred2,prob,u0,ww; show_lines=true, show_third=third)
 
 result3 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,prob),p2,BFGS(),
 			cb = callback, maxiters=S.max_it)
@@ -251,11 +257,9 @@ lossval = loss(p3,u0,ww,prob);
 loss3 = lossval[1]
 pred3 = lossval[2]
 
-# final plot with third dimension and lines
-third = if n >= 3 true else false end
-
-prob = problem(p3, u0, tspan, tsteps)
-callback(p3,loss3,pred3,prob,u0,ww,tspan,tsteps); show_lines=true, show_third=third)
+# result3 may throw an error because of instability in BFGS, if
+# so then skip this
+callback(p3,loss3,pred3,prob,u0,ww; show_lines=true, show_third=third)
 
 jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
 
@@ -264,5 +268,5 @@ jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pre
 # Could add code for pruning model (regularization) by adding costs to parameters
 # and so reducing model size, perhaps searching for minimally sufficient model
 			
-# dt = load(out_file)
+# dt = load(S.out_file)
 # dt["pred1"] # for prediction data for first set
