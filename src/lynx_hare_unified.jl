@@ -21,18 +21,18 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 
 S = (
 
-use_node = true,	# switch between NODE and ODE
+use_node = false,	# switch between NODE and ODE
 layer_size = 20,	# size of layers for NODE
 
 # number of variables to track in (N)ODE, first two are hare and lynx
-n = 4, 					# must be >= 2, number dummy variables is n-2
-opt_dummy_u0 = true,	# optimize dummy init values instead of using rand values
+n = 3, 					# must be >= 2, number dummy variables is n-2
+opt_dummy_u0 = false,	# optimize dummy init values instead of using rand values
 
 # Larger tolerances are faster but errors make gradient descent more challenging
 # However, fit is sensitive to tolerances, seems NODE may benefit from fluctuations
 # with larger tolerances whereas ODE needs smoother gradient from smaller tolerances??
-rtol = 1e-2,		# relative tolerance for solver, ODE -> ~1e-10, NODE -> ~1e-2 or -3
-atol = 1e-3,		# absolute tolerance for solver, ODE -> ~1e-12, NODE -> ~1e-3 or -4
+rtol = 1e-10,		# relative tolerance for solver, ODE -> ~1e-10, NODE -> ~1e-2 or -3
+atol = 1e-12,		# absolute tolerance for solver, ODE -> ~1e-12, NODE -> ~1e-3 or -4
 adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 500,		# max iterates for each incremental learning step
 print_grad = true,	# show gradient on terminal, requires significant overhead
@@ -54,7 +54,7 @@ wt_trunc = 1e-2,	# truncation for weights
 # would be worthwhile to experiment with various solvers
 # see https://diffeq.sciml.ai/stable/solvers/ode_solve/
 # TRBDF2() for large tol, Rodas4P() for small tol; Tsit5() faster? but check instability
-solver = TRBDF2(), 
+solver = Rodas4P(), 
 
 # Activation function:
 # tanh seems to give good fit, perhaps best fit, and maybe overfit
@@ -62,7 +62,7 @@ solver = TRBDF2(),
 # require small gradient near fixed point; identity fit not as good but
 # gradient declines properly near local optimum with BFGS()
 
-activate = 2, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
+activate = 1, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
 
 use_splines = true,
 # if using splines, increase data to pts per year by interpolation
@@ -208,7 +208,7 @@ for i in 1:length(beta_a)
 	prob = S.use_node ?
 				NeuralODE(dudt, (0.0,last_time), S.solver, saveat = ts, 
 					reltol = S.rtol, abstol = S.atol) :
-				ODEProblem(ode!, u0, (0.0,last_time), p=p_init,
+				ODEProblem(ode!, u0, (0.0,last_time), p_init,
 					saveat = ts, reltol = S.rtol, abstol = S.atol)
 	if (i == 1)
 		p = S.use_node ? prob.p : p_init
@@ -221,10 +221,11 @@ for i in 1:length(beta_a)
 end
 
 # do additional optimization round with equal weights at all points
+# if using large tolerances in initial fit, try reducing tols here
 prob = S.use_node ?
 			NeuralODE(dudt, tspan, saveat = tsteps, 
 				reltol = S.rtol, abstol = S.atol) :
-			ODEProblem(ode!, u0, tspan, p=p_init,
+			ODEProblem(ode!, u0, tspan, p_init,
 				saveat = tsteps, reltol = S.rtol, abstol = S.atol)
 
 ww = ones(2,length(tsteps))
