@@ -1,16 +1,36 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates, Random, Printf
 
-# This version combines ODE and NODE into single code base, with options to
-# switch between ODE and NODE. However, performance is very slow. Not sure
-# what creates speed limitation.
+# Combines ODE and NODE into single code base, with options to switch
+# between ODE and NODE. Also provides switch to allow fitting of of initial
+# conditions for extra dummy variable dimensions, ie, more variables in
+# dynamics than in data, option opt_dummy_u0
 
-# LV ODE with extra squared term for each "species". Data for 2D hare
-# and lynx. Better fit using n=3 or 4. For n=5 seems to be too high for
-# easy fit. NODE with n=3 fits better.
+# It may be that optimizing dummy vars sets the value when fitting for
+# the initial timesteps and then gets fixed there, causing trap
+# in local minimum. With random initial value (not optimized), sometimes
+# better or worse but over repeated trials may be better than optimizing
+# on first values.
 
-# See lynx_hare_node.jl for comments on many aspects of this code. Much
-# shared with that file.
+# For lynx and hare data, start by log transform. Thus, linear (affine) ODE
+# with "bias" term can be interpreted as LV ODE with extra squared term for
+# each "species". Data for n=2 2D lynx and hare fit better by using 3 or
+# dimensions, ie, with extra 1 or 2 dummy variables. For NODE, no simple
+# interpretation of terms. For NODE, can also use dummy variables, typically
+# n=3 or 4 gives better fit than n=2. Perhaps 2D data sit in 3D manifold??
+
+# Occasionally system will lock into local minimum that is clearly not
+# a good fit. Rerun program, which seeds with different initial
+# parameters and will typically avoid the same local minimum.
+
+# Goal is to find one good fit. So possible need to do a few
+# runs with different initial parameter seeds is not a difficulty.
+# Program runs reasonably fast on desktop computer, depending on
+# hyerparameters.
+
+# If trouble converging, try varying adm_learn, the learning rate, the 
+# solver tolerances, and the solver algorithm. If instabilities, lower
+# tolerances and use "stiff" ODE solver
 
 now_name = Dates.format(now(),"yyyymmdd_HHMMSS")
 proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
@@ -26,7 +46,7 @@ layer_size = 20,	# size of layers for NODE
 
 # number of variables to track in (N)ODE, first two are hare and lynx
 n = 3, 					# must be >= 2, number dummy variables is n-2
-opt_dummy_u0 = false,	# optimize dummy init values instead of using rand values
+opt_dummy_u0 = true,	# optimize dummy init values instead of using rand values
 
 # Larger tolerances are faster but errors make gradient descent more challenging
 # However, fit is sensitive to tolerances, seems NODE may benefit from fluctuations
@@ -34,7 +54,7 @@ opt_dummy_u0 = false,	# optimize dummy init values instead of using rand values
 rtol = 1e-10,		# relative tolerance for solver, ODE -> ~1e-10, NODE -> ~1e-2 or -3
 atol = 1e-12,		# absolute tolerance for solver, ODE -> ~1e-12, NODE -> ~1e-3 or -4
 adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
-max_it = 500,		# max iterates for each incremental learning step
+max_it = 200,		# max iterates for each incremental learning step
 print_grad = true,	# show gradient on terminal, requires significant overhead
 
 start_time = now_name,
@@ -48,12 +68,37 @@ git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String)),
 generate_rand_seed = true,
 rand_seed = 0x0861a3ea66cd3e9a,
 
+# Training done iteratively, starting with first part of time series,
+# then adding additional time series steps and continuing the fit
+# process. For each step, the time points are weighted according
+# to a 1 - cdf(Beta distribution). To move the weights to the right
+# (later times), the first parameter of the beta distribution is
+# increased repeatedly over i = 1..wt_steps, with the parameter
+# equal to wt_base^i.
+
+# Smaller values of wt_base move the weighting increments at a 
+# slower pace and require more increments and longer run time, 
+# but may gain by avoiding the common local minimum close to 
+# a simple regression line through the fluctuating time series.
+
+# wt_steps is smallest integer such that wt_base^wt_steps >=500.
 wt_base = 1.1,		# good default is 1.1
 wt_trunc = 1e-2,	# truncation for weights
 
 # would be worthwhile to experiment with various solvers
 # see https://diffeq.sciml.ai/stable/solvers/ode_solve/
-# TRBDF2() for large tol, Rodas4P() for small tol; Tsit5() faster? but check instability
+
+# ODE solver, Tsit5() for nonstiff and fastest, but may be unstable.
+# Alternatively use stiff solver TRBDF2(), slower but more stable.
+# For smaller tolerances, if unstable try Rodas4P().
+# Likely it is oscillatory dynamics that cause the difficulty.
+
+# Might need higer adm_learn parameter with stiff solvers, which are
+# more likely to get trapped in local minimum. 
+# Maybe gradient through solvers differs ??
+# Or maybe the stiff solvers provide less error fluctuation
+# and so need greater learning momentum to shake out of local minima ??
+
 solver = Rodas4P(), 
 
 # Activation function:
@@ -189,11 +234,6 @@ function weights(a; b=10, trunc=S.wt_trunc)
 	v = w[w .> trunc]'
 	vcat(v,v)
 end
-
-# Use Beta cdf weights for iterative fitting. Fits earlier parts of time
-# series first with declining weights for later data points, then 
-# keep fitted parameters and redo, slightly increasing weights for
-# later time points.
 
 beta_a = 1:1:wt_steps
 set_rand_seed();
