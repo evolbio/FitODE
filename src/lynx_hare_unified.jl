@@ -1,6 +1,11 @@
 using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 		Statistics, Distributions, JLD2, Dates, Random, Printf
 
+# Code not optimized. Should either make globals into local function args
+# or declare as constants. Should transform "script" code into series of
+# small functions, which optimize much better. Could also add type info
+# in some places, which can aid optimization.
+
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
 # conditions for extra dummy variable dimensions, ie, more variables in
@@ -14,7 +19,7 @@ using DiffEqFlux, DifferentialEquations, Plots, GalacticOptim, CSV, DataFrames,
 
 # For lynx and hare data, start by log transform. Thus, linear (affine) ODE
 # with "bias" term can be interpreted as LV ODE with extra squared term for
-# each "species". Data for n=2 2D lynx and hare fit better by using 3 or
+# each "species". Data for n=2 2D lynx and hare fit better by using 3 or more
 # dimensions, ie, with extra 1 or 2 dummy variables. For NODE, no simple
 # interpretation of terms. For NODE, can also use dummy variables, typically
 # n=3 or 4 gives better fit than n=2. Perhaps 2D data sit in 3D manifold??
@@ -37,7 +42,7 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 
 ###################### Start of settings section ######################
 
-# Use single named tuple S to hold all settings, access by S.var
+# Use single named tuple S to hold all settings, access by S.var_name
 
 S = (
 
@@ -55,6 +60,8 @@ rtol = 1e-10,		# relative tolerance for solver, ODE -> ~1e-10, NODE -> ~1e-2 or 
 atol = 1e-12,		# absolute tolerance for solver, ODE -> ~1e-12, NODE -> ~1e-3 or -4
 adm_learn = 0.0005,	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 200,		# max iterates for each incremental learning step
+					# try 200 for ODE, small tolerances, and Rodas4P solver
+					# and 500 for NODE, with larger tolerances and TRBDF2
 print_grad = true,	# show gradient on terminal, requires significant overhead
 
 start_time = now_name,
@@ -64,7 +71,6 @@ out_file = "/Users/steve/Desktop/" * now_name * ".jld2",
 git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String)),
 
 # if true, program generates new random seed, otherwise uses rand_seed
-# these defaults can be overridden by args to set_rand_seed()
 generate_rand_seed = true,
 rand_seed = 0x0861a3ea66cd3e9a,
 
@@ -109,6 +115,18 @@ solver = Rodas4P(),
 
 activate = 1, # use one of 1 => identity, 2 => tanh, 3 => sigmoid, 4 => swish
 
+# Original data are noisy. Goal here is fitting and prediction to
+# deterministic aspect of trends, using deterministic ODE (or NODE). So, it
+# is useful to smooth data first before fitting. First option is fitting
+# cubic spline. Second option adds additional discrete points to time series
+# by interpolation of splines to enhance smoothness of target for fitting.
+# Spline fits are still a bit irregular and so may not be ideal target for
+# low dimensional differential equation fitting. Third option smooths the
+# splines with gaussian convolution filter. Larger filter_sd smooths over
+# bigger time intervals, but do not use too large setting because the data
+# are oscillatory and smoothing too much destroys main trends in time
+# series.
+
 use_splines = true,
 # if using splines, increase data to pts per year by interpolation
 pts = 2,
@@ -129,10 +147,11 @@ function set_rand_seed(gen_rand_seed=S.generate_rand_seed, new_seed_val=S.rand_s
 	println("Random seed = ", rseed)
 end
 
+# Read data and store in matrix ode_data, row 1 for hare, row 2 for lynx
 df = CSV.read(S.csv_file, DataFrame);
 ode_data = permutedims(Array{Float64}(df[:,2:3]));
 
-# take log and then normalize by average
+# take log and then normalize by average, see DOI: 10.1111/2041-210X.13606
 ode_data = log.(ode_data)
 ode_data = ode_data .- mean(ode_data)
 
@@ -140,7 +159,7 @@ datasize = length(ode_data[1,:]) # Number of time points
 tspan = (0.0f0, Float64(datasize-1)) # Time range
 tsteps = range(tspan[1], tspan[2], length = datasize) # Split to equal steps
 
-# fit spline to data and use fitted data to train
+# fit spline to data and use fitted data to train, gauss smoothing is an option
 if S.use_splines
 	using Interpolations
 	ode_data_orig = ode_data	# store original data
@@ -160,14 +179,16 @@ if S.use_splines
 end
 
 u0 = ode_data[:,1] # Initial condition, first time point in data
+# if using not optimizing dummy vars, add random init condition for dummy dimensions
 if (S.opt_dummy_u0 == false) u0 = vcat(u0,randn(Float64,S.n-2)) end
 
+# activation function to create nonlinearity, identity is no change
 activate = if (S.activate == 1) identity elseif (S.activate == 2) tanh
 					elseif (S.activate == 3) sigmoid else swish end
 
-# If optimizing initial conditions for dummy dimensions, then use parameters p 
-# starting at initial condition u0, ie, u0 for dummy dimensions are first entries
-# of p
+# If optimizing initial conditions for dummy dimensions, then for initial condition u0,
+# dummy dimensions are first entries of p
+# For NODE, many simple options to build alternative network architecture, see SciML docs
 if S.use_node
 	dudt = FastChain(FastDense(S.n, S.layer_size, activate), FastDense(S.layer_size, S.n))
 	if S.opt_dummy_u0
@@ -191,6 +212,9 @@ else # ode instead of node, resove u_init and p in prob arg
 	end
 end
 
+# This gets called for each iterate of DiffEqFlux.sciml_train(), args to left of ;
+# are p plus the return values of loss(). Use this function for any intermediate
+# plotting, display of status, or collection of statistics
 function callback(p, l, pred, prob, u_init, w;
 						doplot = true, show_lines = false, show_third = false)
   if (S.print_grad)
@@ -229,6 +253,7 @@ function loss(p, u_init, w, prob)
 	return loss, pred_all, prob, u_init, w
 end
 
+# For iterative fitting of times series
 function weights(a; b=10, trunc=S.wt_trunc) 
 	w = [1 - cdf(Beta(a,b),x/tsteps[end]) for x = tsteps]
 	v = w[w .> trunc]'
@@ -250,6 +275,8 @@ for i in 1:length(beta_a)
 					reltol = S.rtol, abstol = S.atol) :
 				ODEProblem(ode!, u0, (0.0,last_time), p_init,
 					saveat = ts, reltol = S.rtol, abstol = S.atol)
+	# On first time through loop, set up params p for optimization. Following loop
+	# turns use the parameters returned from sciml_train(), which are in result.u
 	if (i == 1)
 		p = S.use_node ? prob.p : p_init
 		if S.opt_dummy_u0 p = vcat(randn(S.n-2),p) end
@@ -274,6 +301,7 @@ lossval = loss(p1,u0,ww,prob);
 loss1 = lossval[1]
 pred1 = lossval[2]
 
+# Might need more iterates and small adm_learn here if BFGS() below unstable and fails
 result2 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,prob), result.u,
 			ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
 
@@ -285,11 +313,14 @@ pred2 = lossval[2]
 # check grad if of interest
 grad = gradient(p->loss(p,u0,ww,prob)[1], p2);
 
-# final plot with third dimension and lines
+# final plot with third dimension and lines, could add additional dims as needed
+# by altering callback() code
 third = if S.n >= 3 true else false end
 
 callback(p2,loss2,pred2,prob,u0,ww; show_lines=true, show_third=third)
 
+# result3 may throw an error because of instability in BFGS, if
+# so then skip this block
 result3 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,prob),p2,BFGS(),
 			cb = callback, maxiters=S.max_it)
 
@@ -298,16 +329,19 @@ lossval = loss(p3,u0,ww,prob);
 loss3 = lossval[1]
 pred3 = lossval[2]
 
-# result3 may throw an error because of instability in BFGS, if
-# so then skip this
 callback(p3,loss3,pred3,prob,u0,ww; show_lines=true, show_third=third)
-
+# save output if result3 via BFGS() successful, otherwise skip to next line
 jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
+# end skip for result3
+
+# If BFGS and result3 failed, then use this to save output
+jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2)
 
 # Also, could do fit back to ode_data_orig after fitting to splines or gaussian filter
 
 # Could add code for pruning model (regularization) by adding costs to parameters
 # and so reducing model size, perhaps searching for minimally sufficient model
-			
+
+# To view data saved to file:		
 # dt = load(S.out_file)
-# dt["pred1"] # for prediction data for first set
+# dt["pred1"] # for prediction output for first set
