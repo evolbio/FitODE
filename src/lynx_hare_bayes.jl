@@ -41,15 +41,16 @@ sgld_test(t; a = 2.5e-3, b = 0.05, γ = 0.35) = a*(b + t)^-γ
 θ = dt["p3"] # or, θ = dt["p2"], because p3 may not work for some inputs
 
 # get u0, first column of predicted values is u0 
+# MUST REDO THIS, IF OPT_DUMMY_U0, THEN ONLY WANT FIRST TWO ENTRIES
 u0 = dt["pred3"][:,1]
 prob = ODEProblem(ode!, u0, tspan, θ, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
 ww = ones(2,length(tsteps))
 
 if (length(θ) != length(prob.p)) error("Mismatch between input param length and model") end
-if (length(u0) != n) error("Dimension mismatch between n variable and input") end
+if (length(u0) != S.n) error("Dimension mismatch between n variable and input") end
 
 println("Loss in input = ", dt["loss3"]);
-println("Calculated loss = ", loss(θ, prob, ww, u0)[1]);
+println("Calculated loss = ", loss(θ, u0, ww, prob)[1]);
 
 parameters = []
 losses = Float64[]
@@ -64,16 +65,18 @@ beta = 0.9;
 λ =1e-8;
 
 # do one update with m=1e-3, because very small initial gradients cause problem
+grad = gradient(θ -> loss(θ, u0, ww, prob)[1], θ)[1];
 p_sgld(grad, θ, 1, 1e-3.*ones(length(θ)); a=sgld_a, b=sgld_b)
 
-grd = gradient(p -> loss(p, prob, ww, u0)[1], θ)[1];
+grd = gradient(θ -> loss(θ, u0, ww, prob)[1], θ)[1];
 precond = grd .* grd;
 
-warmup = 20000
-total = 40000
+using StatsPlots, StatsBase
+warmup = 200
+total = 4000
 for t in 1:total
 	if t % 100 == 0 println("t = " , t) end
-	grad = gradient(p -> loss(p, prob, ww, u0)[1], θ)[1]
+	grad = gradient(θ -> loss(θ, u0, ww, prob)[1], θ)[1]
 	# precondition gradient, normalizing magnitude in each dimension
 	precond *= beta
 	precond += (1-beta)*(grad .* grad)
@@ -82,13 +85,19 @@ for t in 1:total
 	# start collecting statistics after initial warmup period
 	if t > warmup
 		tmp = deepcopy(θ)
-		curr_loss = loss(θ, prob, ww, u0)[1]
+		curr_loss = loss(θ, u0, ww, prob)[1]
 		append!(losses, curr_loss)
 		append!(grad_norm, sum(abs2, grad))
 		append!(parameters, [tmp])
 		println(curr_loss)
+		if t % 100 == 0
+			half = Int(floor((t-warmup) / 2))
+			println("Data timesteps = ", t - warmup)
+			display(density(losses[1:half]))
+			display(density!(losses[half+1:end]))
+		end
 	else
-		println(loss(θ, prob, ww, u0)[1])
+		println(loss(θ, u0, ww, prob)[1])
 	end
 end
 
@@ -153,3 +162,10 @@ amatrix = reduce(hcat,auto)';
 histogram(amatrix[:,10])
 # autocorr plot for ith parameter
 plot(amatrix[3,:])
+
+for i in 1:20 
+	pred = predict(parameters[rand(1:length(parameters)], prob, u0)
+	i == 1 ? display(plot(tsteps, pred[1,:], color=:blue, label="")) : 
+					display(plot!(tsteps,pred[1,:], color=1, label=""))
+	display(plot!(tsteps,pred[2,:], color=2, label=""))
+end

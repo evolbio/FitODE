@@ -43,6 +43,9 @@ proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
 ###################### Start of settings section ######################
 
 # Use single named tuple S to hold all settings, access by S.var_name
+# Provides simple way to save settings by saving this one variable
+
+# Might be better to use Parameters.jl and approach for structs there
 
 S = (
 
