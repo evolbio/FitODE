@@ -176,7 +176,6 @@ end
 function fit_diffeq(S)
 	ode_data, u0, tspan, tsteps, ode_data_orig = lynx_hare.read_data(S);
 	dudt, ode!, predict = lynx_hare.setup_diffeq_func(S);
-	L = loss_args(u0,prob,predict,ode_data,tsteps)
 	
 	beta_a = 1:S.wt_incr:S.wt_steps
 	if !S.use_node p_init = 0.1*rand(S.nsqr + S.n) end; # n^2 matrix plus n for individual growth
@@ -193,6 +192,7 @@ function fit_diffeq(S)
 						reltol = S.rtol, abstol = S.atol) :
 					ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 						(0.0,last_time), p_init, saveat = ts, reltol = S.rtol, abstol = S.atol)
+		L = loss_args(u0,prob,predict,ode_data,tsteps)
 		# On first time through loop, set up params p for optimization. Following loop
 		# turns use the parameters returned from sciml_train(), which are in result.u
 		if (i == 1)
@@ -204,7 +204,15 @@ function fit_diffeq(S)
 		result = DiffEqFlux.sciml_train(p -> loss(p,S,L,w),
 						 p, ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
 	end
-	p_opt = refine_fit(result.u S, L)
+	# To prepare for final fitting and calculations, must set prob to full training
+	# period with tspan and tsteps and then redefine loss_args values in L
+	prob = S.use_node ?
+				NeuralODE(dudt, tspan, S.solver, saveat = tsteps, 
+					reltol = S.rtol, abstol = S.atol) :
+				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
+					tspan, p_init, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
+	L = loss_args(u0,prob,predict,ode_data,tsteps)
+	p_opt = refine_fit(result.u, S, L)
 	return p_opt, L
 end
 

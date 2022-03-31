@@ -21,7 +21,7 @@ using lynx_hare_settings, lynx_hare
 # To reset rand seed, make or renew assignment to S. See lynx_hare_settings.jl.
 
 S = default_ode()
-p_opt1 = fit_diffeq(S)
+p_opt1,L = fit_diffeq(S)
 
 
 ###################################################################
