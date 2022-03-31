@@ -14,9 +14,9 @@ end
 
 # One can initialize and then modify settings as follows
 # S = default_node()	# default settings for NODE
-# S = Settings(S; layer_size=50, activate=3)
+# S = Settings(S; layer_size=50, activate=3, [ADD OTHER OPTIONS AS NEEDED])
 # S = default_ode()		# default settings for ODE
-# S = Settings(S; opt_dummy_u0 = true)
+# S = Settings(S; opt_dummy_u0 = true, [ADD OTHER OPTIONS AS NEEDED])
 # See docs for Parameters.jl package
 
 @with_kw struct Settings
@@ -57,18 +57,21 @@ actual_seed = set_rand_seed(generate_rand_seed, preset_seed)
 # process. For each step, the time points are weighted according
 # to a 1 - cdf(Beta distribution). To move the weights to the right
 # (later times), the first parameter of the beta distribution is
-# increased repeatedly over i = 1..wt_steps, with the parameter
-# equal to wt_base^i.
+# increased repeatedly over i = 1:wt_incr:wt_steps, with the parameter
+# equal to wt_base^i, with wt_incr determining the rate at which the
+# incremental fits move to the "right" to include later times in the
+# data series, larger wt_incr moves faster to the right
 
 # Smaller values of wt_base move the weighting increments at a 
 # slower pace and require more increments and longer run time, 
-# but may gain by avoiding the common local minimum close to 
+# but may gain by avoiding the common local minimum as 
 # a simple regression line through the fluctuating time series.
 
 # wt_steps is smallest integer such that wt_base^wt_steps >=500.
 wt_base = 1.1		# good default is 1.1
 wt_trunc = 1e-2		# truncation for weights
 wt_steps = Int(ceil(log(500)/log(wt_base)))
+wt_incr = 1			# increment for i = 1:wt_incr:wt_steps, see above
 
 # would be worthwhile to experiment with various solvers
 # see https://diffeq.sciml.ai/stable/solvers/ode_solve/

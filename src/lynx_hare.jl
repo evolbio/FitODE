@@ -1,7 +1,7 @@
 module lynx_hare
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
-		DifferentialEquations, Printf
-export callback, loss, weights
+		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
+export callback, loss, weights, fit_diffeq
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
@@ -35,6 +35,22 @@ export callback, loss, weights
 # tolerances and use "stiff" ODE solver
 
 # See comments in lynx_hare_settings.jl
+
+####################################################################
+
+# These functions called w/in module, no need to call directly.
+# However, can be useful for debugging in interactive session.
+
+# ode_data, u0, tspan, tsteps, ode_data_orig = lynx_hare.read_data(S);
+# dudt, ode!, predict = lynx_hare.setup_diffeq_func(S);
+
+struct loss_args
+	u0
+	prob
+	predict
+	ode_data
+	tsteps
+end
 
 function read_data(S)
 	# Read data and store in matrix ode_data, row 1 for hare, row 2 for lynx
@@ -111,25 +127,26 @@ end
 # This gets called for each iterate of DiffEqFlux.sciml_train(), args to left of ;
 # are p plus the return values of loss(). Use this function for any intermediate
 # plotting, display of status, or collection of statistics
-function callback(p, l, pred, prob, u_init, w;
+function callback(p, loss_val, S, L, w, pred;
 						doplot = true, show_lines = false, show_third = false)
+  # printing gradient takes calculation time, turn off may yield speedup
   if (S.print_grad)
-  	grad = gradient(p->loss(p,u_init,w,prob)[1], p)[1]
+  	grad = gradient(p->loss(p,S,L,w)[1], p)[1]
   	gnorm = sqrt(sum(abs2, grad))
-  	println(@sprintf("%5.3e; %5.3e", l, gnorm))
+  	println(@sprintf("%5.3e; %5.3e", loss_val, gnorm))
   else
-  	display(l)
+  	display(loss_val)
   end
   # plot current prediction against data
   len = length(pred[1,:])
-  ts = tsteps[1:len]
+  ts = L.tsteps[1:len]
   ysize = if show_third 1200 else 800 end
   panels = if show_third 3 else 2 end
   plt = plot(size=(600,ysize), layout=(panels,1))
   plot_type! = if show_lines plot! else scatter! end
-  plot_type!(ts, ode_data[1,1:len], label = "hare", subplot=1)
+  plot_type!(ts, L.ode_data[1,1:len], label = "hare", subplot=1)
   plot_type!(plt, ts, pred[1,:], label = "pred", subplot=1)
-  plot_type!(ts, ode_data[2,1:len], label = "lynx", subplot=2)
+  plot_type!(ts, L.ode_data[2,1:len], label = "lynx", subplot=2)
   plot_type!(plt, ts, pred[2,:], label = "pred", subplot=2)
   if show_third
   	plot_type!(plt, ts, pred[3,:], label = "3rdD", subplot=3)
@@ -140,20 +157,76 @@ function callback(p, l, pred, prob, u_init, w;
   return false
 end
 
-function loss(p, u_init, w, prob)
-	pred_all = predict(p, prob, u_init)
+function loss(p, S, L, w)
+	pred_all = L.predict(p, L.prob, L.u0)
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
 	pred_length = length(pred[1,:])
 	if pred_length != length(w[1,:]) println("Mismatch") end
-	loss = sum(abs2, w[:,1:pred_length] .* (ode_data[:,1:pred_length] .- pred))
-	return loss, pred_all, prob, u_init, w
+	loss = sum(abs2, w[:,1:pred_length] .* (L.ode_data[:,1:pred_length] .- pred))
+	return loss, S, L, w, pred_all
 end
 
 # For iterative fitting of times series
-function weights(a, tsteps; b=10, trunc=S.wt_trunc) 
+function weights(a, tsteps; b=10.0, trunc=S.wt_trunc) 
 	w = [1 - cdf(Beta(a,b),x/tsteps[end]) for x = tsteps]
 	v = w[w .> trunc]'
 	vcat(v,v)
+end
+
+function fit_diffeq(S)
+	ode_data, u0, tspan, tsteps, ode_data_orig = lynx_hare.read_data(S);
+	dudt, ode!, predict = lynx_hare.setup_diffeq_func(S);
+	L = loss_args(u0,prob,predict,ode_data,tsteps)
+	
+	beta_a = 1:S.wt_incr:S.wt_steps
+	if !S.use_node p_init = 0.1*rand(S.nsqr + S.n) end; # n^2 matrix plus n for individual growth
+	
+	local result
+	for i in 1:length(beta_a)
+		println("Iterate ", i, " of ", length(beta_a))
+		w = weights(S.wt_base^beta_a[i], tsteps; trunc=S.wt_trunc)
+		last_time = tsteps[length(w[1,:])]
+		ts = tsteps[tsteps .<= last_time]
+		# for ODE and opt_dummy, may redefine u0 and p, here just need right sizes for ode!
+		prob = S.use_node ?
+					NeuralODE(dudt, (0.0,last_time), S.solver, saveat = ts, 
+						reltol = S.rtol, abstol = S.atol) :
+					ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
+						(0.0,last_time), p_init, saveat = ts, reltol = S.rtol, abstol = S.atol)
+		# On first time through loop, set up params p for optimization. Following loop
+		# turns use the parameters returned from sciml_train(), which are in result.u
+		if (i == 1)
+			p = S.use_node ? prob.p : p_init
+			if S.opt_dummy_u0 p = vcat(randn(S.n-2),p) end
+		else
+			p = result.u
+		end
+		result = DiffEqFlux.sciml_train(p -> loss(p,S,L,w),
+						 p, ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
+	end
+	p_opt = refine_fit(result.u S, L)
+	return p_opt, L
+end
+
+function refine_fit(p, S, L; rate_div=5, iter_mult=2)
+	println("\nFinal round of fitting, using full time series in given data")
+	println("Reducing ADAM learning rate by ", rate_div,
+				" and increasing iterates by ", iter_mult, "\n")
+	rate = S.adm_learn / rate_div
+	iter = S.max_it * iter_mult
+	ww = ones(2,length(L.tsteps))	# full equal weighting for full fitted time series
+	result = DiffEqFlux.sciml_train(p -> loss(p,S,L,ww),
+						 p, ADAM(rate); cb = callback, maxiters=iter)
+	return result.u
+end
+
+function refine_fit_bfgs(p, S, L) 
+	println("\nBFGS sometimes suffers instability or gives other warnings")
+	println("If so, then abort and do not use results\n")
+	ww = ones(2,length(L.tsteps))	# full equal weighting for full fitted time series
+	result = DiffEqFlux.sciml_train(p -> loss(p,S,L,ww),
+						 p, BFGS(); cb = callback, maxiters=S.max_it)
+	return result.u
 end
 
 end # module
