@@ -50,6 +50,7 @@ struct loss_args
 	predict
 	ode_data
 	tsteps
+	w
 end
 
 function read_data(S)
@@ -127,11 +128,11 @@ end
 # This gets called for each iterate of DiffEqFlux.sciml_train(), args to left of ;
 # are p plus the return values of loss(). Use this function for any intermediate
 # plotting, display of status, or collection of statistics
-function callback(p, loss_val, S, L, w, pred;
+function callback(p, loss_val, S, L, pred;
 						doplot = true, show_lines = false, show_third = false)
   # printing gradient takes calculation time, turn off may yield speedup
   if (S.print_grad)
-  	grad = gradient(p->loss(p,S,L,w)[1], p)[1]
+  	grad = gradient(p->loss(p,S,L)[1], p)[1]
   	gnorm = sqrt(sum(abs2, grad))
   	println(@sprintf("%5.3e; %5.3e", loss_val, gnorm))
   else
@@ -157,13 +158,15 @@ function callback(p, loss_val, S, L, w, pred;
   return false
 end
 
-function loss(p, S, L, w)
+calc_gradient(p,S,L) = gradient(p->loss(p,S,L)[1], p)[1]
+
+function loss(p, S, L)
 	pred_all = L.predict(p, L.prob, L.u0)
 	pred = pred_all[1:2,:]	# First rows are hare & lynx, others dummies
 	pred_length = length(pred[1,:])
-	if pred_length != length(w[1,:]) println("Mismatch") end
-	loss = sum(abs2, w[:,1:pred_length] .* (L.ode_data[:,1:pred_length] .- pred))
-	return loss, S, L, w, pred_all
+	if pred_length != length(L.w[1,:]) println("Mismatch") end
+	loss = sum(abs2, L.w[:,1:pred_length] .* (L.ode_data[:,1:pred_length] .- pred))
+	return loss, S, L, pred_all
 end
 
 # For iterative fitting of times series
@@ -192,7 +195,7 @@ function fit_diffeq(S)
 						reltol = S.rtol, abstol = S.atol) :
 					ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 						(0.0,last_time), p_init, saveat = ts, reltol = S.rtol, abstol = S.atol)
-		L = loss_args(u0,prob,predict,ode_data,tsteps)
+		L = loss_args(u0,prob,predict,ode_data,tsteps,w)
 		# On first time through loop, set up params p for optimization. Following loop
 		# turns use the parameters returned from sciml_train(), which are in result.u
 		if (i == 1)
@@ -201,7 +204,7 @@ function fit_diffeq(S)
 		else
 			p = result.u
 		end
-		result = DiffEqFlux.sciml_train(p -> loss(p,S,L,w),
+		result = DiffEqFlux.sciml_train(p -> loss(p,S,L),
 						 p, ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
 	end
 	# To prepare for final fitting and calculations, must set prob to full training
@@ -211,7 +214,8 @@ function fit_diffeq(S)
 					reltol = S.rtol, abstol = S.atol) :
 				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 					tspan, p_init, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
-	L = loss_args(u0,prob,predict,ode_data,tsteps)
+	w = ones(2,length(tsteps))
+	L = loss_args(u0,prob,predict,ode_data,tsteps,w)
 	p_opt = refine_fit(result.u, S, L)
 	return p_opt, L
 end
@@ -222,8 +226,7 @@ function refine_fit(p, S, L; rate_div=5, iter_mult=2)
 				" and increasing iterates by ", iter_mult, "\n")
 	rate = S.adm_learn / rate_div
 	iter = S.max_it * iter_mult
-	ww = ones(2,length(L.tsteps))	# full equal weighting for full fitted time series
-	result = DiffEqFlux.sciml_train(p -> loss(p,S,L,ww),
+	result = DiffEqFlux.sciml_train(p -> loss(p,S,L),
 						 p, ADAM(rate); cb = callback, maxiters=iter)
 	return result.u
 end
@@ -231,8 +234,7 @@ end
 function refine_fit_bfgs(p, S, L) 
 	println("\nBFGS sometimes suffers instability or gives other warnings")
 	println("If so, then abort and do not use results\n")
-	ww = ones(2,length(L.tsteps))	# full equal weighting for full fitted time series
-	result = DiffEqFlux.sciml_train(p -> loss(p,S,L,ww),
+	result = DiffEqFlux.sciml_train(p -> loss(p,S,L),
 						 p, BFGS(); cb = callback, maxiters=S.max_it)
 	return result.u
 end
