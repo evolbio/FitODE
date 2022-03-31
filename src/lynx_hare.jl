@@ -1,7 +1,8 @@
 module lynx_hare
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
-export callback, loss, weights, fit_diffeq
+export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs
+			calc_gradient
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
@@ -220,8 +221,9 @@ function fit_diffeq(S)
 	return p_opt, L
 end
 
-function refine_fit(p, S, L; rate_div=5, iter_mult=2)
+function refine_fit(p, S, L; rate_div=5.0, iter_mult=2.0)
 	println("\nFinal round of fitting, using full time series in given data")
+	println("Last step of previous fit did not fully weight final pts in series")
 	println("Reducing ADAM learning rate by ", rate_div,
 				" and increasing iterates by ", iter_mult, "\n")
 	rate = S.adm_learn / rate_div
@@ -233,7 +235,7 @@ end
 
 function refine_fit_bfgs(p, S, L) 
 	println("\nBFGS sometimes suffers instability or gives other warnings")
-	println("If so, then abort and do not use results\n")
+	println("If so, then abort and do not use result\n")
 	result = DiffEqFlux.sciml_train(p -> loss(p,S,L),
 						 p, BFGS(); cb = callback, maxiters=S.max_it)
 	return result.u

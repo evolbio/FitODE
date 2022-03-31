@@ -1,4 +1,4 @@
-using lynx_hare_settings, lynx_hare
+using lynx_hare_settings, lynx_hare, JLD2
 
 # Loading imported modules can take a couple of minutes
 
@@ -20,52 +20,44 @@ using lynx_hare_settings, lynx_hare
 
 # To reset rand seed: setup S, then reset_rseed(S, rseed).
 
-S = default_ode()
+########################### Fitting full time series ##########################
+
+S = default_ode();
+S = reset_rseed(S, 0xe5b0652b110a89b1)
+
+# L is struct that includes u0, ode_data, tsteps, see struct loss_args for other parts
 p_opt1,L = fit_diffeq(S)
 
+# bfgs sometimes fails, if so then use p_opt1
+# see definition of refine_fit() for other options to refine fit
+p_opt2=refine_fit_bfgs(p_opt1,S,L)
+
+loss1, _, _, pred1 = loss(p_opt1,S,L);		# use if p_opt2 fails or of interest
+loss2, _, _, pred2 = loss(p_opt2,S,L);
+
+use_2 = true;	# set to false if p_opt2 fails
+
+p, loss_v, pred = use_2 ? (p_opt2, loss2, pred2) : (p_opt1, loss1, pred1);
+
+# if gradient is of interest
+grad = calc_gradient(p,S,L)
+gnorm = sqrt(sum(abs2, grad))
+
+# save results
+
+jldsave(S.out_file; p, S, L, loss_v, pred)
+
+# To view data saved to file:		
+# dt = load(S.out_file)
+# dt["pred"] # for prediction data
+
+# various plots
+
+
+################### Quasi-Bayes, split training and prediction ##################
+
 
 ###################################################################
-
-# do additional optimization round with equal weights at all points
-# if using large tolerances in initial fit, try reducing tols here
-# to get better approach to local minimum
-prob = S.use_node ?
-			NeuralODE(dudt, tspan, saveat = tsteps, 
-				reltol = S.rtol, abstol = S.atol) :
-			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0, tspan,
-				p_init, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
-
-ww = ones(2,length(tsteps))
-p1 = result.u
-lossval = loss(p1,u0,ww,prob);
-loss1 = lossval[1]
-pred1 = lossval[2]
-
-# Might need more iterates and small adm_learn here if BFGS() below unstable and fails
-# Using small adm_learn will allow better convergence to local optimum
-result2 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,prob), result.u,
-			ADAM(S.adm_learn); cb = callback, maxiters=S.max_it)
-
-p2 = result2.u
-lossval = loss(p2,u0,ww,prob);
-loss2 = lossval[1]
-pred2 = lossval[2]
-
-# result3 may throw an error because of instability in BFGS, if
-# so then skip this block, purpose of BFGS is to track gradient
-# locally to move toward local minimum, BFGS is better at doing
-# that than ADAM
-result3 = DiffEqFlux.sciml_train(p -> loss(p,u0,ww,prob),p2,BFGS(),
-			cb = callback, maxiters=S.max_it)
-
-p3 = result3.u
-lossval = loss(p3,u0,ww,prob);
-loss3 = lossval[1]
-pred3 = lossval[2]
-
-###################################################################
-# check grad if of interest
-grad = gradient(p->loss(p,u0,ww,prob)[1], p2);
 
 # final plot with third dimension and lines, could add additional dims as needed
 # by altering callback() code
@@ -74,18 +66,3 @@ third = if S.n >= 3 true else false end
 callback(p2,loss2,pred2,prob,u0,ww; show_lines=true, show_third=third)
 
 callback(p3,loss3,pred3,prob,u0,ww; show_lines=true, show_third=third)
-# save output if result3 via BFGS() successful, otherwise skip to next line
-jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2, p3, loss3, pred3)
-# end skip for result3
-
-# If BFGS and result3 failed, then use this to save output
-jldsave(S.out_file; S, rseed, p1, loss1, pred1, p2, loss2, pred2)
-
-# Also, could do fit back to ode_data_orig after fitting to splines or gaussian filter
-
-# Could add code for pruning model (regularization) by adding costs to parameters
-# and so reducing model size, perhaps searching for minimally sufficient model
-
-# To view data saved to file:		
-# dt = load(S.out_file)
-# dt["pred1"] # for prediction output for first set
