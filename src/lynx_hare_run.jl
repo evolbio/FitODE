@@ -18,7 +18,7 @@ using lynx_hare_settings, lynx_hare
 # Provides simple way to access and save settings via one variable
 # Redefinitions in struct S in lynx_hare_settings.jl required to run on new system
 
-# To reset rand seed, make or renew assignment to S. See lynx_hare_settings.jl.
+# To reset rand seed: setup S, then reset_rseed(S, rseed).
 
 S = default_ode()
 p_opt1,L = fit_diffeq(S)

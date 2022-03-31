@@ -1,10 +1,12 @@
 module lynx_hare_settings
 using Parameters, DifferentialEquations, Dates, Random
-export Settings, default_ode, default_node
+export Settings, default_ode, default_node, reset_rseed
 
 default_ode() = Settings()
 default_node() = Settings(use_node=true, rtol=1e-2, atol=1e-3, max_it=500,
 						solver = TRBDF2())
+reset_rseed(S, rseed) = Settings(S; generate_rand_seed=false, preset_seed=rseed,
+							actual_seed=set_rand_seed(false,rseed))
 
 function set_rand_seed(gen_seed, preset_seed)
 	rseed = gen_seed ? rand(UInt) : preset_seed
