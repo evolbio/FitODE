@@ -45,10 +45,10 @@ gnorm = sqrt(sum(abs2, grad))
 
 # save results
 
-jldsave(S.out_file; p, S, L, loss_v, pred)
+save_data(p, S, L, loss_v, pred; file=S.out_file)
 
 # To view data saved to file:		
-# dt = load(S.out_file)
+# dt = load(S.out_file) # or load("file_path")
 # dt["pred"] # for prediction data
 
 # various plots

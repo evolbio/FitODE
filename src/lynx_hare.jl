@@ -1,8 +1,8 @@
 module lynx_hare
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
-export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs
-			calc_gradient
+export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
+			calc_gradient, save_data
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
@@ -240,5 +240,7 @@ function refine_fit_bfgs(p, S, L)
 						 p, BFGS(); cb = callback, maxiters=S.max_it)
 	return result.u
 end
+
+save_data(p, S, L, loss_v, pred; file=S.out_file) = jldsave(file; p, S, L, loss_v, pred)
 
 end # module
