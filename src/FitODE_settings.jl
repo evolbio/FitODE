@@ -36,6 +36,8 @@ opt_dummy_u0 = false	# optimize dummy init values instead of using rand values
 # with larger tolerances whereas ODE needs smoother gradient from smaller tolerances??
 rtol = 1e-10		# relative tolerance for solver, ODE -> ~1e-10, NODE -> ~1e-2 or -3
 atol = 1e-12		# absolute tolerance for solver, ODE -> ~1e-12, NODE -> ~1e-3 or -4
+rtolR = 1e-10		# relative tolerance for solver for refine_fit stages
+atolR = 1e-12		# absolute tolerance for solver for refine_fit stages
 adm_learn = 0.0005	# Adam rate, >=0.0002 for Tsit5, >=0.0005 for TRBDF2, change as needed
 max_it = 200		# max iterates for each incremental learning step
 					# try 200 for ODE, small tolerances, and Rodas4P solver
@@ -90,6 +92,7 @@ wt_incr = 1			# increment for i = 1:wt_incr:wt_steps, see above
 # and so need greater learning momentum to shake out of local minima ??
 
 solver = Rodas4P()
+solverR = Rodas4P()	# for refine_fit stages, only applies to NODE
 
 # Activation function:
 # tanh seems to give good fit, perhaps best fit, and maybe overfit

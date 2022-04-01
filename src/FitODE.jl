@@ -211,10 +211,10 @@ function fit_diffeq(S)
 	# To prepare for final fitting and calculations, must set prob to full training
 	# period with tspan and tsteps and then redefine loss_args values in L
 	prob = S.use_node ?
-				NeuralODE(dudt, tspan, S.solver, saveat = tsteps, 
-					reltol = S.rtol, abstol = S.atol) :
+				NeuralODE(dudt, tspan, S.solverR, saveat = tsteps, 
+					reltol = S.rtolR, abstol = S.atolR) :
 				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
-					tspan, p_init, saveat = tsteps, reltol = S.rtol, abstol = S.atol)
+					tspan, p_init, saveat = tsteps, reltol = S.rtolR, abstol = S.atolR)
 	w = ones(2,length(tsteps))
 	L = loss_args(u0,prob,predict,ode_data,tsteps,w)
 	p_opt = refine_fit(result.u, S, L)

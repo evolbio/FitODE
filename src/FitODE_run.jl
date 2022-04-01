@@ -1,4 +1,4 @@
-using FitODE, FitODE_settings, JLD2
+using FitODE, FitODE_settings
 
 # Loading imported modules can take a couple of minutes
 
@@ -25,14 +25,18 @@ using FitODE, FitODE_settings, JLD2
 S = default_ode();
 S = reset_rseed(S, 0xe5b0652b110a89b1)
 
+# S = default_node();
+# S = reset_rseed(S, 0xe5b0652b110a89b1);
+# S = Settings(S, n=3, opt_dummy_u0 = true)
+
 # L is struct that includes u0, ode_data, tsteps, see struct loss_args for other parts
 p_opt1,L = fit_diffeq(S)
 
 # bfgs sometimes fails, if so then use p_opt1
 # see definition of refine_fit() for other options to refine fit
-p_opt2=refine_fit_bfgs(p_opt1,S,L)
+p_opt2 = refine_fit_bfgs(p_opt1,S,L)
 
-loss1, _, _, pred1 = loss(p_opt1,S,L);		# use if p_opt2 fails or of interest
+loss1, _, _, pred1 = loss(p_opt1,S,L);		# use if p_opt2 fails or p_opt1 of interest
 loss2, _, _, pred2 = loss(p_opt2,S,L);
 
 use_2 = true;	# set to false if p_opt2 fails
@@ -47,11 +51,15 @@ gnorm = sqrt(sum(abs2, grad))
 
 save_data(p, S, L, loss_v, pred; file=S.out_file)
 
-# To view data saved to file:		
-# dt = load_data("file_path") 	# or load_data(S.out_file)
+#############################  Plotting  ###################################
+
+# Load data saved to file, use only one of following		
+dt = load_data("file_path");
+# Or if S is current and will be used
+dt = load_data(S.out_file);
 
 # use keys(dt) for list of vars in named tuple, for example
-# dt.pred 						# for prediction data, 
+# dt.pred 				# returns prediction data 
 
 # various plots
 
