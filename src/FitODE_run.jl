@@ -1,4 +1,4 @@
-using FitODE, FitODE_settings
+using FitODE, FitODE_settings, FitODE_plots
 
 # Loading imported modules can take a couple of minutes
 
@@ -63,19 +63,20 @@ dt = load_data(S.out_file);
 
 # various plots
 
+# compare original data to smoothed target data for fitting
+plot_data_orig_smooth(dt.S)		# requires rereading data from disk, a bit slower
+plot_data_orig_smooth(dt.L.ode_data, dt.L.tsteps, dt.L.ode_data_orig) # a bit faster
+
+# compare predicted values to smoothed data
+plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred)
+plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true)
+plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true,
+					num_dim=size(dt.pred,1))
+
+# phase plot, needs fixing if n > 3
+plot_phase(dt.L.ode_data, dt.pred)
 
 ################### Quasi-Bayes, split training and prediction ##################
-
-
-###################################################################
-
-# final plot with third dimension and lines, could add additional dims as needed
-# by altering callback() code
-third = if S.n >= 3 true else false end
-
-callback(p2,loss2,pred2,prob,u0,ww; show_lines=true, show_third=third)
-
-callback(p3,loss3,pred3,prob,u0,ww; show_lines=true, show_third=third)
 
 
 

@@ -2,7 +2,7 @@ module FitODE
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
-			calc_gradient, save_data, load_data
+			calc_gradient, save_data, load_data, read_data
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
@@ -50,6 +50,7 @@ struct loss_args
 	prob
 	predict
 	ode_data
+	ode_data_orig
 	tsteps
 	w
 end
@@ -129,34 +130,29 @@ end
 # This gets called for each iterate of DiffEqFlux.sciml_train(), args to left of ;
 # are p plus the return values of loss(). Use this function for any intermediate
 # plotting, display of status, or collection of statistics
-function callback(p, loss_val, S, L, pred;
-						doplot = true, show_lines = false, show_third = false)
-  # printing gradient takes calculation time, turn off may yield speedup
-  if (S.print_grad)
-  	grad = gradient(p->loss(p,S,L)[1], p)[1]
-  	gnorm = sqrt(sum(abs2, grad))
-  	println(@sprintf("%5.3e; %5.3e", loss_val, gnorm))
-  else
-  	display(loss_val)
-  end
-  # plot current prediction against data
-  len = length(pred[1,:])
-  ts = L.tsteps[1:len]
-  ysize = if show_third 1200 else 800 end
-  panels = if show_third 3 else 2 end
-  plt = plot(size=(600,ysize), layout=(panels,1))
-  plot_type! = if show_lines plot! else scatter! end
-  plot_type!(ts, L.ode_data[1,1:len], label = "hare", subplot=1)
-  plot_type!(plt, ts, pred[1,:], label = "pred", subplot=1)
-  plot_type!(ts, L.ode_data[2,1:len], label = "lynx", subplot=2)
-  plot_type!(plt, ts, pred[2,:], label = "pred", subplot=2)
-  if show_third
-  	plot_type!(plt, ts, pred[3,:], label = "3rdD", subplot=3)
-  end
-  if doplot
-    display(plot(plt))
-  end
-  return false
+# For more general plotting function, see FitODE_plots, plot_target_pred()
+function callback(p, loss_val, S, L, pred; doplot = true, show_lines = false)
+	# printing gradient takes calculation time, turn off may yield speedup
+	if (S.print_grad)
+		grad = gradient(p->loss(p,S,L)[1], p)[1]
+		gnorm = sqrt(sum(abs2, grad))
+		println(@sprintf("%5.3e; %5.3e", loss_val, gnorm))
+	else
+		display(loss_val)
+	end
+	if doplot
+		# plot current prediction against data
+		len = length(pred[1,:])
+		ts = L.tsteps[1:len]
+		plt = plot(size=(600,800), layout=(2,1))
+		plot_type! = if show_lines plot! else scatter! end
+		plot_type!(ts, L.ode_data[1,1:len], label = "hare", subplot=1)
+		plot_type!(plt, ts, pred[1,:], label = "pred", subplot=1)
+		plot_type!(ts, L.ode_data[2,1:len], label = "lynx", subplot=2)
+		plot_type!(plt, ts, pred[2,:], label = "pred", subplot=2)
+		display(plot(plt))
+  	end
+  	return false
 end
 
 calc_gradient(p,S,L) = gradient(p->loss(p,S,L)[1], p)[1]
@@ -196,7 +192,7 @@ function fit_diffeq(S)
 						reltol = S.rtol, abstol = S.atol) :
 					ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 						(0.0,last_time), p_init, saveat = ts, reltol = S.rtol, abstol = S.atol)
-		L = loss_args(u0,prob,predict,ode_data,tsteps,w)
+		L = loss_args(u0,prob,predict,ode_data,ode_data_orig,tsteps,w)
 		# On first time through loop, set up params p for optimization. Following loop
 		# turns use the parameters returned from sciml_train(), which are in result.u
 		if (i == 1)
@@ -216,7 +212,7 @@ function fit_diffeq(S)
 				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 					tspan, p_init, saveat = tsteps, reltol = S.rtolR, abstol = S.atolR)
 	w = ones(2,length(tsteps))
-	L = loss_args(u0,prob,predict,ode_data,tsteps,w)
+	L = loss_args(u0,prob,predict,ode_data,ode_data_orig,tsteps,w)
 	p_opt = refine_fit(result.u, S, L)
 	return p_opt, L
 end
