@@ -1,4 +1,4 @@
-# Read in first part of lynx_hare_ode.jl
+# Read in first part of FitODE_ode.jl
 # Using pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
 # and code in https://github.com/RajDandekar/MSML21_BayesianNODE.
 # Theory in Li15.pdf, however, had to correct online code examples after reading
@@ -7,7 +7,7 @@
 # also weights noise incorrectly, weight should be sqrt of ϵ.
 
 # read parameters
-in_file = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare/output/ode/n3-1-identity.jld2"
+in_file = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/ode/n3-1-identity.jld2"
 dt = load(in_file)
 
 # train_end_time = 90.0

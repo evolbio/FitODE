@@ -1,4 +1,4 @@
-module lynx_hare
+module FitODE
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
@@ -35,15 +35,15 @@ export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
 # solver tolerances, and the solver algorithm. If instabilities, lower
 # tolerances and use "stiff" ODE solver
 
-# See comments in lynx_hare_settings.jl
+# See comments in FitODE_settings.jl
 
 ####################################################################
 
 # These functions called w/in module, no need to call directly.
 # However, can be useful for debugging in interactive session.
 
-# ode_data, u0, tspan, tsteps, ode_data_orig = lynx_hare.read_data(S);
-# dudt, ode!, predict = lynx_hare.setup_diffeq_func(S);
+# ode_data, u0, tspan, tsteps, ode_data_orig = FitODE.read_data(S);
+# dudt, ode!, predict = FitODE.setup_diffeq_func(S);
 
 struct loss_args
 	u0
@@ -178,8 +178,8 @@ function weights(a, tsteps; b=10.0, trunc=S.wt_trunc)
 end
 
 function fit_diffeq(S)
-	ode_data, u0, tspan, tsteps, ode_data_orig = lynx_hare.read_data(S);
-	dudt, ode!, predict = lynx_hare.setup_diffeq_func(S);
+	ode_data, u0, tspan, tsteps, ode_data_orig = FitODE.read_data(S);
+	dudt, ode!, predict = FitODE.setup_diffeq_func(S);
 	
 	beta_a = 1:S.wt_incr:S.wt_steps
 	if !S.use_node p_init = 0.1*rand(S.nsqr + S.n) end; # n^2 matrix plus n for individual growth

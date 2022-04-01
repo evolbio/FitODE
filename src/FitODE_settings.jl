@@ -1,4 +1,4 @@
-module lynx_hare_settings
+module FitODE_settings
 using Parameters, DifferentialEquations, Dates, Random
 export Settings, default_ode, default_node, reset_rseed
 
@@ -43,8 +43,8 @@ max_it = 200		# max iterates for each incremental learning step
 print_grad = true	# show gradient on terminal, requires significant overhead
 
 start_time = Dates.format(now(),"yyyymmdd_HHMMSS")
-proj_dir = "/Users/steve/sim/zzOtherLang/julia/autodiff/lynx_hare"
-csv_file = "$proj_dir/input/lynx_hare_data.csv"
+proj_dir = "/Users/steve/sim/zzOtherLang/julia/FitODE"
+csv_file = "$proj_dir/input/FitODE_data.csv"
 out_file = "/Users/steve/Desktop/" * start_time * ".jld2"
 
 git_vers = chomp(read(`git -C $proj_dir rev-parse --short HEAD`,String))

@@ -1,11 +1,11 @@
-using lynx_hare_settings, lynx_hare, JLD2
+using FitODE_settings, FitODE, JLD2
 
 # Loading imported modules can take a couple of minutes
 
 # First call to a function causes compiling and optimization, which causes a delay
 # Subsequent call to a function with different argument types triggers new compile
 
-# Read comments and code in lynx_hare.jl and lynx_hare_settings.jl
+# Read comments and code in FitODE.jl and FitODE_settings.jl
 
 # One can initialize and then modify settings as follows
 # S = default_node()	# default settings for NODE
@@ -16,7 +16,7 @@ using lynx_hare_settings, lynx_hare, JLD2
 
 # Use single struct S to hold all settings, access by S.var_name
 # Provides simple way to access and save settings via one variable
-# Redefinitions in struct S in lynx_hare_settings.jl required to run on new system
+# Redefinitions in struct S in FitODE_settings.jl required to run on new system
 
 # To reset rand seed: setup S, then reset_rseed(S, rseed).
 
