@@ -2,7 +2,7 @@ module FitODE
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
-			calc_gradient, save_data
+			calc_gradient, save_data, load_data
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial
@@ -242,5 +242,11 @@ function refine_fit_bfgs(p, S, L)
 end
 
 save_data(p, S, L, loss_v, pred; file=S.out_file) = jldsave(file; p, S, L, loss_v, pred)
+
+function load_data(file)
+	dt = load(file)
+	(p = dt["p"], S = dt["S"], L = dt["L"], loss_v = dt["loss_v"], pred = dt["pred"])
+end
+	
 
 end # module

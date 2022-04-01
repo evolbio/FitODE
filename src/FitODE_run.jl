@@ -1,4 +1,4 @@
-using FitODE_settings, FitODE, JLD2
+using FitODE, FitODE_settings, JLD2
 
 # Loading imported modules can take a couple of minutes
 
@@ -48,8 +48,10 @@ gnorm = sqrt(sum(abs2, grad))
 save_data(p, S, L, loss_v, pred; file=S.out_file)
 
 # To view data saved to file:		
-# dt = load(S.out_file) # or load("file_path")
-# dt["pred"] # for prediction data
+# dt = load_data("file_path") 	# or load_data(S.out_file)
+
+# use keys(dt) for list of vars in named tuple, for example
+# dt.pred 						# for prediction data, 
 
 # various plots
 
@@ -66,3 +68,9 @@ third = if S.n >= 3 true else false end
 callback(p2,loss2,pred2,prob,u0,ww; show_lines=true, show_third=third)
 
 callback(p3,loss3,pred3,prob,u0,ww; show_lines=true, show_third=third)
+
+
+
+
+
+
