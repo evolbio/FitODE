@@ -207,7 +207,7 @@ function fit_diffeq(S)
 	# To prepare for final fitting and calculations, must set prob to full training
 	# period with tspan and tsteps and then redefine loss_args values in L
 	prob = S.use_node ?
-				NeuralODE(dudt, tspan, S.solverR, saveat = tsteps, 
+				NeuralODE(dudt, tspan, S.solver, saveat = tsteps, 
 					reltol = S.rtolR, abstol = S.atolR) :
 				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 					tspan, p_init, saveat = tsteps, reltol = S.rtolR, abstol = S.atolR)
@@ -222,6 +222,11 @@ function refine_fit(p, S, L; rate_div=5.0, iter_mult=2.0)
 	println("Last step of previous fit did not fully weight final pts in series")
 	println("Reducing ADAM learning rate by ", rate_div,
 				" and increasing iterates by ", iter_mult, "\n")
+	if S.use_node
+		println("Also reducing tolerances to rel = ", S.rtolR, " and abs = ", S.atolR)
+		println("which if set too low may cause a delay for NODE\n")
+		println("If delay is too long, adjust S.rtolR and S.atolR as needed\n")
+	end
 	rate = S.adm_learn / rate_div
 	iter = S.max_it * iter_mult
 	result = DiffEqFlux.sciml_train(p -> loss(p,S,L),

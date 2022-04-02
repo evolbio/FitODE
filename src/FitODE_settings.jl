@@ -3,8 +3,8 @@ using Parameters, DifferentialEquations, Dates, Random
 export Settings, default_ode, default_node, reset_rseed
 
 default_ode() = Settings()
-default_node() = Settings(use_node=true, rtol=1e-2, atol=1e-3, max_it=500,
-						solver = TRBDF2())
+default_node() = Settings(use_node=true, rtol=1e-2, atol=1e-3, rtolR=1e-4, atolR=1e-6,
+						max_it=500, solver = TRBDF2())
 reset_rseed(S, rseed) = Settings(S; generate_rand_seed=false, preset_seed=rseed,
 							actual_seed=set_rand_seed(false,rseed))
 
@@ -92,7 +92,6 @@ wt_incr = 1			# increment for i = 1:wt_incr:wt_steps, see above
 # and so need greater learning momentum to shake out of local minima ??
 
 solver = Rodas4P()
-solverR = Rodas4P()	# for refine_fit stages, only applies to NODE
 
 # Activation function:
 # tanh seems to give good fit, perhaps best fit, and maybe overfit
