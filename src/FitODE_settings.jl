@@ -3,7 +3,7 @@ using Parameters, DifferentialEquations, Dates, Random
 export Settings, default_ode, default_node, reset_rseed
 
 default_ode() = Settings()
-default_node() = Settings(use_node=true, rtol=1e-2, atol=1e-3, rtolR=1e-4, atolR=1e-6,
+default_node() = Settings(use_node=true, rtol=1e-2, atol=1e-3, rtolR=1e-6, atolR=1e-8,
 						max_it=500, solver = TRBDF2())
 reset_rseed(S, rseed) = Settings(S; generate_rand_seed=false, preset_seed=rseed,
 							actual_seed=set_rand_seed(false,rseed))

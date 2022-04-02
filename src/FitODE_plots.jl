@@ -28,19 +28,23 @@ end
 # fix for cases in which number dimensions > 3
 function plot_phase(target, pred; dummy_dim = true)
 	@assert num_rows(target) <= 3 "More than 3 target dimensions, fix code"
-	panels = dummy_dim ? 2 : 1
 	target_dim = num_rows(target)
 	pred_dim = num_rows(pred)
+	panels = (dummy_dim && target_dim == 2) ? 1 + pred_dim - target_dim : 1
 	len = length(pred[1,:])
 	plt = plot(size=(600,400 * panels), layout=(panels,1))
 	plot!(array_to_tuple([target[i,:] for i in 1:num_rows(target)]),
 			subplot=1,color=1,label="data", xlabel="hare", ylabel="lynx")
 	plot!(array_to_tuple([pred[i,:] for i in 1:num_rows(target)]),
 			subplot=1,color=2,label="pred")
-	if dummy_dim
-		@assert num_rows(pred) <= 3 "More than 3 prediction dimensions, fix code"
-		plot!(array_to_tuple([pred[i,:] for i in 1:num_rows(pred)]),
-				subplot=2,color=2,label="pred", xlabel="hare", ylabel="lynx")
+	for j in 2:panels
+		# here only if target_dim == 2
+		tt = vcat(target, pred[j+1,:]')
+		pp = vcat(pred[1:2,:], pred[j+1,:]')
+		plot!(array_to_tuple([tt[i,:] for i in 1:3]),
+				subplot=j,color=1,label="data", xlabel="hare", ylabel="lynx")
+		plot!(array_to_tuple([pp[i,:] for i in 1:3]),
+				subplot=j,color=2,label="pred", xlabel="hare", ylabel="lynx")
 	end
 	display(plt)
 end
