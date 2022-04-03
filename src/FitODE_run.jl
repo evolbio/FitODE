@@ -12,6 +12,7 @@ using FitODE, FitODE_settings, FitODE_plots
 # S = Settings(S; layer_size=50, activate=3 [, ADD OTHER OPTIONS AS NEEDED])
 # S = default_ode()		# default settings for ODE
 # S = Settings(S; opt_dummy_u0 = true [, ADD OTHER OPTIONS AS NEEDED])
+# S = Settings(S; n=5, nsqr=25)
 # See docs for Parameters.jl package
 
 # Use single struct S to hold all settings, access by S.var_name
@@ -23,11 +24,14 @@ using FitODE, FitODE_settings, FitODE_plots
 ########################### Fitting full time series ##########################
 
 S = default_ode();
-S = reset_rseed(S, 0xe5b0652b110a89b1)
 
 # S = default_node();
 # S = reset_rseed(S, 0xe5b0652b110a89b1);
-# S = Settings(S, n=3, opt_dummy_u0 = true)
+
+# can reset individual fields in settings
+# S = Settings(S; n=3, opt_dummy_u0 = true)
+# if resetting particular fields in S, should rerun calculated fields by doing
+# S = recalc_settings(S)
 
 # L is struct that includes u0, ode_data, tsteps, see struct loss_args for other parts
 p_opt1,L = fit_diffeq(S)
@@ -52,6 +56,8 @@ gnorm = sqrt(sum(abs2, grad))
 save_data(p, S, L, loss_v, pred; file=S.out_file)
 
 #############################  Plotting  ###################################
+
+using FitODE_plots
 
 # Load data saved to file, use only one of following		
 dt = load_data("file_path");
@@ -78,6 +84,11 @@ plot_phase(dt.L.ode_data, dt.pred)
 
 ################### Quasi-Bayes, split training and prediction ##################
 
+using FitODE_bayes
+
+# dt=load_data("/Users/steve/sim/zzOtherLang/julia/FitODE/output/ode-n3-1.jld2");
+
+losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L);
 
 
 

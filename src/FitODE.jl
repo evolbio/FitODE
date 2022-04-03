@@ -3,6 +3,8 @@ using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
 			calc_gradient, save_data, load_data, read_data
+# re-export from DiffEqFlux
+export gradient
 
 # Combines ODE and NODE into single code base, with options to switch
 # between ODE and NODE. Also provides switch to allow fitting of of initial

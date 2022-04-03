@@ -1,6 +1,6 @@
 module FitODE_settings
 using Parameters, DifferentialEquations, Dates, Random
-export Settings, default_ode, default_node, reset_rseed
+export Settings, default_ode, default_node, reset_rseed, recalc_settings
 
 default_ode() = Settings()
 default_node() = Settings(use_node=true, rtol=1e-3, atol=1e-4, rtolR=1e-6, atolR=1e-8,
@@ -12,6 +12,16 @@ function set_rand_seed(gen_seed, preset_seed)
 	rseed = gen_seed ? rand(UInt) : preset_seed
 	Random.seed!(rseed)
 	return rseed
+end
+
+# fix calculated settings, in case one setting changes must propagate to others
+function recalc_settings(S)
+	S = Settings(S; nsqr = S.n*S.n, start_time = Dates.format(now(),"yyyymmdd_HHMMSS"),
+			git_vers = chomp(read(`git -C $(S.proj_dir) rev-parse --short HEAD`,String)),
+			actual_seed = set_rand_seed(S.generate_rand_seed, S.preset_seed),
+			wt_steps = Int(ceil(log(500)/log(S.wt_base))))
+	S = Settings(S; out_file = "/Users/steve/Desktop/" * S.start_time * ".jld2")
+	return S
 end
 
 # One can initialize and then modify settings as follows
