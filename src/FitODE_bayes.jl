@@ -1,6 +1,6 @@
 module FitODE_bayes
-using FitODE, StatsPlots, HypothesisTests, Printf
-export psgld_sample
+using FitODE, StatsPlots, HypothesisTests, Printf, JLD2
+export psgld_sample, save_bayes, load_bayes, plot_loss_bayes
 
 # pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
 # and theory in Li et al. 2015 (arXiv:1512.07666v1)
@@ -68,13 +68,14 @@ function psgld_sample(p, S, L, warmup=2000, sample=5000;
 				first_losses = losses[1:half]
 				second_losses = losses[half+1:end]
 				ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
+				append!(ks, ks_diff.δ)
+				append!(ks_times, t-warmup)
+				# plot
 				plt = plot(size=(600,400 * 2), layout=(2,1))
 				density!(first_losses, subplot=1, plot_title="KS = "
 						* @sprintf("%5.3e", ks_diff.δ) * ", samples per curve = "
 						* @sprintf("%d", half), label="1st" )
 				density!(second_losses, subplot=1, label="2nd")
-				append!(ks, ks_diff.δ)
-				append!(ks_times, t-warmup)
 				plot!(ks_times, ks, label="ks", subplot=2, legend=nothing)
 				display(plt)
 			end
@@ -83,6 +84,48 @@ function psgld_sample(p, S, L, warmup=2000, sample=5000;
 		end
 	end
 	return losses, parameters, ks, ks_times
+end
+
+function plot_loss_bayes(losses; skip_frac=0.0, ks_intervals=10)
+	plt = plot(size=(600,800), layout=(2,1))
+	start_index = Int(ceil(skip_frac*length(losses)))
+	start_index = (start_index==0) ? 1 : start_index
+	losses = @view losses[start_index:end]
+	if length(losses) < 5*ks_intervals
+		println("\nWARNING: number of losses < 5*ks_intervals\n")
+	end
+	half = Int(floor(length(losses)/2))
+	first_losses = @view losses[1:half]
+	second_losses = @view losses[half+1:end]
+	ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
+	density!(first_losses, subplot=1, plot_title="KS = "
+			* @sprintf("%5.3e", ks_diff.δ) * ", samples per curve = "
+			* @sprintf("%d", half), label="1st" )
+	density!(second_losses, subplot=1, label="2nd")
+	
+	ks_times = Int[]
+	ks = []
+	for i in 1:(ks_intervals-1)
+		last_index = Int(floor(Float64(length(losses)*i)/ks_intervals))
+		ks_losses = @view losses[1:last_index]
+		half = Int(floor(length(ks_losses)/2))
+		first_losses = @view ks_losses[1:half]
+		second_losses = @view ks_losses[half+1:end]
+		ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
+		append!(ks, ks_diff.δ)
+		append!(ks_times, length(ks_losses))
+	end
+	plot!(ks_times, ks, subplot=2, legend=nothing)
+	display(plt)
+end
+
+save_bayes(losses, parameters, ks, ks_times; file="/Users/steve/Desktop/bayes.jld2") =
+					jldsave(file; losses, parameters, ks, ks_times)
+
+function load_bayes(file)
+	bt = load(file)
+	(losses = bt["losses"], parameters = bt["parameters"],
+			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
 end # module

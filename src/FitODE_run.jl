@@ -59,13 +59,19 @@ save_data(p, S, L, loss_v, pred; file=S.out_file)
 
 using FitODE_plots
 
-# Load data saved to file, use only one of following		
-dt = load_data("file_path");
-# Or if S is current and will be used
-dt = load_data(S.out_file);
+# If S is current and will be used
+# dt = load_data(S.out_file);
 
-# use keys(dt) for list of vars in named tuple, for example
-# dt.pred 				# returns prediction data 
+# Or for saved outputs from prior runs
+proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
+file = "ode-n3-1.jld2"; 	# fill this in with desired file
+dt = load_data(proj_output * "file");
+
+# Or for any file path		
+# dt = load_data("file_path");
+
+# use keys(dt) for list of vars in named tuple
+# dt.keyname 		# returns particular key, e.g., dt.pred
 
 # various plots
 
@@ -86,9 +92,14 @@ plot_phase(dt.L.ode_data, dt.pred)
 
 using FitODE_bayes
 
-# dt=load_data("/Users/steve/sim/zzOtherLang/julia/FitODE/output/ode-n3-1.jld2");
+# If reloading data needed
+file = "ode-n3-1.jld2"; 	# fill this in with desired file
+dt = load_data(proj_output * "file");
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L);
+
+save_bayes(losses, parameters, ks, ks_times; file=proj_output * "bayes-" * file);
+bt = load_bayes(proj_output * "bayes-" * file);
 
 
 
