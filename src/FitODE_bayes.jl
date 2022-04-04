@@ -1,6 +1,8 @@
 module FitODE_bayes
-using FitODE, StatsPlots, HypothesisTests, Printf, JLD2
-export psgld_sample, save_bayes, load_bayes, plot_loss_bayes
+using FitODE, StatsPlots, StatsBase, HypothesisTests, Printf, JLD2
+export psgld_sample, save_bayes, load_bayes, plot_loss_bayes, plot_sgld_epsilon,
+			plot_autocorr, plot_moving_ave, p_matrix, p_ts, auto_matrix, plot_traj_bayes,
+			plot_autocorr_hist
 
 # pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
 # and theory in Li et al. 2015 (arXiv:1512.07666v1)
@@ -86,6 +88,59 @@ function psgld_sample(p, S, L, warmup=2000, sample=5000;
 	return losses, parameters, ks, ks_times
 end
 
+# Saving and loading results
+save_bayes(losses, parameters, ks, ks_times; file="/Users/steve/Desktop/bayes.jld2") =
+					jldsave(file; losses, parameters, ks, ks_times)
+
+function load_bayes(file)
+	bt = load(file)
+	(losses = bt["losses"], parameters = bt["parameters"],
+			ks = bt["ks"], ks_times = bt["ks_times"])
+end
+
+# utility functions for extracting data
+
+moving_average(vs,n) = [sum(@view vs[i:(i+n-1)])/n for i in 1:(length(vs)-(n-1))]
+
+# params is a vector with each entry for time as a vector of parameters
+# this makes a matrix with rows for time and cols for parameter values
+# see https://discourse.julialang.org/t/how-to-convert-vector-of-vectors-to-matrix/72609/14
+p_matrix(params) = reduce(hcat,params)' 
+p_ts(params, index) = p_matrix(params)[:,index]
+
+# matrix with each row for parameter and col for autocorr vals
+function auto_matrix(params, arange=1:50)
+	pm = p_matrix(params)
+	auto = [autocor(pm[:,i],arange) for i=1:length(pm[1,:])]
+	return reduce(hcat,auto)'
+end
+
+# plotting functions
+
+plot_sgld_epsilon(end_time, a=1e-1, b=1e4, g=0.35) = 
+	display(plot([i for i=1:10:end_time], [sgld_test(i; a=a, b=b, g=g) for i=1:10:end_time], 
+		yscale=:log10))
+
+plot_autocorr(data, auto_range=1:100) = display(plot(autocor(data, auto_range)))
+
+plot_autocorr_hist(param, lag) = display(histogram(auto_matrix(param, 1:30)[:,lag]))
+
+plot_moving_ave(data, n) = 
+	display(plot(n/2 .+ Array(1:(length(data)-(n-1))),
+		[sum(@view data[i:(i+n-1)])/n for i in 1:(length(data)-(n-1))]))
+		
+function plot_traj_bayes(param, L, S; samples=20)
+	plt = plot(size=(600,800), layout=(2,1))
+	for i in 1:samples 
+		pred = L.predict(param[rand(1:length(param))], L.prob, L.u0)
+		plot!(L.tsteps,pred[1,:], color=mma[2], label="", subplot=1)
+		plot!(L.tsteps,pred[2,:], color=mma[2], label="", subplot=2)
+	end
+	plot!(L.tsteps, L.ode_data[1,:], color=mma[1], linewidth=3, label="hare", subplot=1)
+	plot!(L.tsteps, L.ode_data[2,:], color=mma[1], linewidth=3, label="lynx", subplot=2)
+	display(plt)
+end
+
 function plot_loss_bayes(losses; skip_frac=0.0, ks_intervals=10)
 	plt = plot(size=(600,800), layout=(2,1))
 	start_index = Int(ceil(skip_frac*length(losses)))
@@ -109,23 +164,24 @@ function plot_loss_bayes(losses; skip_frac=0.0, ks_intervals=10)
 		last_index = Int(floor(Float64(length(losses)*i)/ks_intervals))
 		ks_losses = @view losses[1:last_index]
 		half = Int(floor(length(ks_losses)/2))
-		first_losses = @view ks_losses[1:half]
+	 	first_losses = @view ks_losses[1:half]
 		second_losses = @view ks_losses[half+1:end]
 		ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
 		append!(ks, ks_diff.δ)
 		append!(ks_times, length(ks_losses))
 	end
+	# and finally for full data set
+	i = ks_intervals
+	last_index = Int(floor(Float64(length(losses)*i)/ks_intervals))
+	ks_losses = @view losses[1:last_index]
+	half = Int(floor(length(ks_losses)/2))
+	first_losses = @view ks_losses[1:half]
+	second_losses = @view ks_losses[half+1:end]
+	ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
+	append!(ks, ks_diff.δ)
+	append!(ks_times, length(ks_losses))
 	plot!(ks_times, ks, subplot=2, legend=nothing)
 	display(plt)
-end
-
-save_bayes(losses, parameters, ks, ks_times; file="/Users/steve/Desktop/bayes.jld2") =
-					jldsave(file; losses, parameters, ks, ks_times)
-
-function load_bayes(file)
-	bt = load(file)
-	(losses = bt["losses"], parameters = bt["parameters"],
-			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
 end # module

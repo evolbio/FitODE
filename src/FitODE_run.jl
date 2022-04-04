@@ -64,8 +64,8 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n3-1.jld2"; 	# fill this in with desired file
-dt = load_data(proj_output * "file");
+file = "ode-n3-1.jld2"; 		# fill this in with desired file name
+dt = load_data(proj_output * file);
 
 # Or for any file path		
 # dt = load_data("file_path");
@@ -88,20 +88,42 @@ plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true,
 # phase plot, needs fixing if n > 3
 plot_phase(dt.L.ode_data, dt.pred)
 
-################### Quasi-Bayes, split training and prediction ##################
+################### Approx Bayes, split training and prediction ##################
 
-using FitODE_bayes
+using FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
-file = "ode-n3-1.jld2"; 	# fill this in with desired file
-dt = load_data(proj_output * "file");
+file = "ode-n3-1.jld2"; 		# fill this in with desired file base name
+dt = load_data(proj_output * file);
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L);
 
-save_bayes(losses, parameters, ks, ks_times; file=proj_output * "bayes-" * file);
-bt = load_bayes(proj_output * "bayes-" * file);
+bfile = proj_output * "bayes-" * file;
+save_bayes(losses, parameters, ks, ks_times; file=bfile);
+bt = load_bayes(bfile);
 
+# look at decay of epsilon over time
+plot_sgld_epsilon(50000, a=1e-1, b=1e4, g=0.35)
 
+# plot loss values over time to look for convergence
+plot_moving_ave(bt.losses, 300)
+plot_autocorr(bt.losses, 1:20)		# autocorrelation over given range
 
+# compare density of losses to examine convergence of loss posterior distn
+plot_loss_bayes(bt.losses; skip_frac=0.0, ks_intervals=10)
 
+# parameters
+pr = p_matrix(bt.parameters);		# matrix rows for time and cols for parameter values
+pts = p_ts(bt.parameters,8);		# time series for 8th parameter, change index as needed
+density(pts)						# approx posterior density plot
+
+# autocorr
+autoc = auto_matrix(bt.parameters, 1:30);	# row for parameter and col for autocorr vals
+plot_autocorr(pts, 1:50)			# autocorrelation plot for ts in in pts, range of lags
+plot(autoc[8,:])					# another way to get autocorr plot for 8th parameter
+plot_autocorr_hist(bt.parameters,10)	# distn for 10th lag over all parameters
+
+# trajectories sampled from posterior parameter distn
+
+plot_traj_bayes(bt.parameters,dt.L,dt.S; samples=20)
 
