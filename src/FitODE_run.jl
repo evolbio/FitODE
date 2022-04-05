@@ -65,7 +65,7 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n4-1.jld2"; 		# fill this in with desired file name
+file = "ode-n3-1.jld2"; 		# fill this in with desired file name
 dt = load_data(proj_output * file);
 
 # Or for any file path		
@@ -94,12 +94,12 @@ using FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
 proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n4-1.jld2"; 		# fill this in with desired file base name
+file = "ode-n3-1.jld2"; 		# fill this in with desired file base name
 dt = load_data(proj_output * file);
 
 # for NODE or with ODE with n>=4, try lower a, such as 2e-3 or 1e-3 or lower
 # experiment with SGLD parameters, see pSGLD struct in FitODE_bayes
-B = pSGLD(warmup=5000, sample=10000, a=2e-3)
+B = pSGLD(warmup=5000, sample=10000, a=5e-4)
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L, B)
 
