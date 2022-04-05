@@ -65,7 +65,7 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "node-n4-1.jld2"; 		# fill this in with desired file name
+file = "ode-n4-1.jld2"; 		# fill this in with desired file name
 dt = load_data(proj_output * file);
 
 # Or for any file path		
@@ -93,18 +93,21 @@ plot_phase(dt.L.ode_data, dt.pred)
 using FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
-file = "ode-n3-1.jld2"; 		# fill this in with desired file base name
+proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
+file = "ode-n4-1.jld2"; 		# fill this in with desired file base name
 dt = load_data(proj_output * file);
 
-losses, parameters, ks, ks_times =
-	psgld_sample(dt.p, dt.S, dt.L; warmup=5000, sample=10000, sgld_a=1e-1);
+# for NODE or with ODE with n>=4, try lower a, such as 5e-3 or lower
+B = pSGLD(warmup=5000, sample=10000, a=1e-3)
+
+losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L, B)
 
 bfile = proj_output * "bayes-" * file;
-save_bayes(losses, parameters, ks, ks_times; file=bfile);
+save_bayes(B, losses, parameters, ks, ks_times; file=bfile);
 bt = load_bayes(bfile);
 
 # look at decay of epsilon over time
-plot_sgld_epsilon(50000, a=1e-1, b=1e4, g=0.35)
+plot_sgld_epsilon(50000, a=bt.B.a, b=bt.B.a, g=bt.B.g)
 
 # plot loss values over time to look for convergence
 plot_moving_ave(bt.losses, 300)

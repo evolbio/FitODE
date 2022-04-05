@@ -1,8 +1,18 @@
 module FitODE_bayes
-using FitODE, StatsPlots, StatsBase, HypothesisTests, Printf, JLD2
+using FitODE, StatsPlots, StatsBase, HypothesisTests, Printf, JLD2, Parameters
 export psgld_sample, save_bayes, load_bayes, plot_loss_bayes, plot_sgld_epsilon,
 			plot_autocorr, plot_moving_ave, p_matrix, p_ts, auto_matrix, plot_traj_bayes,
-			plot_autocorr_hist
+			plot_autocorr_hist, pSGLD
+			
+@with_kw struct pSGLD
+	warmup =	2000
+	sample =	5000
+	a =			5e-3
+	b =			1e4
+	g =			0.35
+	pre_beta =	0.9
+	pre_λ =		1e-8
+end
 
 # pSGLD, see Rackauckas22.pdf, Bayesian Neural Ordinary Differential Equations
 # and theory in Li et al. 2015 (arXiv:1512.07666v1)
@@ -37,8 +47,7 @@ end
 # use to test parameters for setting magnitude of ϵ
 sgld_test(t; a = 2.5e-3, b = 0.05, g = 0.35) = a*(b + t)^-g
 
-function psgld_sample(p_in, S, L; warmup=2000, sample=5000,
-			sgld_a=1e-1, sgld_b=1e4, pre_beta=0.9, pre_λ=1e-8)
+function psgld_sample(p_in, S, L, B::pSGLD)
 	
 	p = deepcopy(p_in)		# copy to local variable, else p_in changed
 	parameters = []
@@ -50,36 +59,29 @@ function psgld_sample(p_in, S, L; warmup=2000, sample=5000,
 	grd = gradient(p -> loss(p, S, L)[1], p)[1]
 	precond = grd .* grd
 	
-# 	p_orig = deepcopy(p)					# debug
-# 	curr_loss = loss(p, S, L)[1] 	# debug
-# 	println(p_orig - p)				# debug
-	
-	
-	
-	for t in 1:(warmup+sample)
+	for t in 1:(B.warmup+B.sample)
 		if t % 100 == 0 println("t = " , t) end
 		grad = gradient(p -> loss(p, S, L)[1], p)[1]
 		# precondition gradient, normalizing magnitude in each dimension
-		precond *= pre_beta
-		precond += (1-pre_beta)*(grad .* grad)
-		m = 1 ./ (pre_λ .+ sqrt.(precond))
-		p_sgld(grad, p, t, m; a=sgld_a, b=sgld_b)
-#		println(p_orig - p)	# debug
+		precond *= B.pre_beta
+		precond += (1-B.pre_beta)*(grad .* grad)
+		m = 1 ./ (B.pre_λ .+ sqrt.(precond))
+		p_sgld(grad, p, t, m; a=B.a, b=B.b, g=B.g)
 		# start collecting statistics after initial warmup period
-		if t > warmup
+		if t > B.warmup
 			tmp = deepcopy(p)
 			curr_loss = loss(p, S, L)[1]
 			append!(losses, curr_loss)
 			append!(parameters, [tmp])
 			println(curr_loss)
 			if t % 100 == 0
-				half = Int(floor((t-warmup) / 2))
-				println("Sample timesteps = ", t - warmup)
+				half = Int(floor((t-B.warmup) / 2))
+				println("Sample timesteps = ", t - B.warmup)
 				first_losses = losses[1:half]
 				second_losses = losses[half+1:end]
 				ks_diff = ApproximateTwoSampleKSTest(first_losses, second_losses)
 				append!(ks, ks_diff.δ)
-				append!(ks_times, t-warmup)
+				append!(ks_times, t-B.warmup)
 				# plot
 				plt = plot(size=(600,400 * 2), layout=(2,1))
 				density!(first_losses, subplot=1, plot_title="KS = "
