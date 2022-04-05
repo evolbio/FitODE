@@ -99,12 +99,12 @@ function psgld_sample(p_in, S, L, B::pSGLD)
 end
 
 # Saving and loading results
-save_bayes(losses, parameters, ks, ks_times; file="/Users/steve/Desktop/bayes.jld2") =
-					jldsave(file; losses, parameters, ks, ks_times)
+save_bayes(B, losses, parameters, ks, ks_times; file="/Users/steve/Desktop/bayes.jld2") =
+					jldsave(file; B, losses, parameters, ks, ks_times)
 
 function load_bayes(file)
 	bt = load(file)
-	(losses = bt["losses"], parameters = bt["parameters"],
+	(B = bt["B"], losses = bt["losses"], parameters = bt["parameters"],
 			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
@@ -127,7 +127,7 @@ end
 
 # plotting functions
 
-plot_sgld_epsilon(end_time, a=1e-1, b=1e4, g=0.35) = 
+plot_sgld_epsilon(end_time; a=1e-1, b=1e4, g=0.35) = 
 	display(plot([i for i=1:10:end_time], [sgld_test(i; a=a, b=b, g=g) for i=1:10:end_time], 
 		yscale=:log10))
 

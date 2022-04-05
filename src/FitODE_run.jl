@@ -97,8 +97,9 @@ proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
 file = "ode-n4-1.jld2"; 		# fill this in with desired file base name
 dt = load_data(proj_output * file);
 
-# for NODE or with ODE with n>=4, try lower a, such as 5e-3 or lower
-B = pSGLD(warmup=5000, sample=10000, a=1e-3)
+# for NODE or with ODE with n>=4, try lower a, such as 2e-3 or 1e-3 or lower
+# experiment with SGLD parameters, see pSGLD struct in FitODE_bayes
+B = pSGLD(warmup=5000, sample=10000, a=2e-3)
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L, B)
 
@@ -107,7 +108,7 @@ save_bayes(B, losses, parameters, ks, ks_times; file=bfile);
 bt = load_bayes(bfile);
 
 # look at decay of epsilon over time
-plot_sgld_epsilon(50000, a=bt.B.a, b=bt.B.a, g=bt.B.g)
+plot_sgld_epsilon(15000; a=bt.B.a, b=bt.B.a, g=bt.B.g)
 
 # plot loss values over time to look for convergence
 plot_moving_ave(bt.losses, 300)
