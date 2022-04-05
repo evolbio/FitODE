@@ -37,9 +37,10 @@ end
 # use to test parameters for setting magnitude of ϵ
 sgld_test(t; a = 2.5e-3, b = 0.05, g = 0.35) = a*(b + t)^-g
 
-function psgld_sample(p, S, L, warmup=2000, sample=5000;
+function psgld_sample(p_in, S, L; warmup=2000, sample=5000,
 			sgld_a=1e-1, sgld_b=1e4, pre_beta=0.9, pre_λ=1e-8)
 	
+	p = deepcopy(p_in)		# copy to local variable, else p_in changed
 	parameters = []
 	losses = Float64[]
 	ks = Float64[]
@@ -49,6 +50,12 @@ function psgld_sample(p, S, L, warmup=2000, sample=5000;
 	grd = gradient(p -> loss(p, S, L)[1], p)[1]
 	precond = grd .* grd
 	
+# 	p_orig = deepcopy(p)					# debug
+# 	curr_loss = loss(p, S, L)[1] 	# debug
+# 	println(p_orig - p)				# debug
+	
+	
+	
 	for t in 1:(warmup+sample)
 		if t % 100 == 0 println("t = " , t) end
 		grad = gradient(p -> loss(p, S, L)[1], p)[1]
@@ -57,6 +64,7 @@ function psgld_sample(p, S, L, warmup=2000, sample=5000;
 		precond += (1-pre_beta)*(grad .* grad)
 		m = 1 ./ (pre_λ .+ sqrt.(precond))
 		p_sgld(grad, p, t, m; a=sgld_a, b=sgld_b)
+#		println(p_orig - p)	# debug
 		# start collecting statistics after initial warmup period
 		if t > warmup
 			tmp = deepcopy(p)

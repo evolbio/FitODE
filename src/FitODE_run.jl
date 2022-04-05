@@ -30,6 +30,7 @@ S = default_ode();
 
 # can reset individual fields in settings
 # S = Settings(S; n=3, opt_dummy_u0 = true)
+# S = Settings(S; n=4, max_it = 500)	# n=4 needs more iterates
 # if resetting particular fields in S, should rerun calculated fields by doing
 # S = recalc_settings(S)
 
@@ -64,7 +65,7 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n3-1.jld2"; 		# fill this in with desired file name
+file = "node-n4-1.jld2"; 		# fill this in with desired file name
 dt = load_data(proj_output * file);
 
 # Or for any file path		
@@ -85,7 +86,6 @@ plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true)
 plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true,
 					num_dim=size(dt.pred,1))
 
-# phase plot, needs fixing if n > 3
 plot_phase(dt.L.ode_data, dt.pred)
 
 ################### Approx Bayes, split training and prediction ##################
@@ -96,7 +96,8 @@ using FitODE_bayes, Plots, StatsPlots
 file = "ode-n3-1.jld2"; 		# fill this in with desired file base name
 dt = load_data(proj_output * file);
 
-losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L);
+losses, parameters, ks, ks_times =
+	psgld_sample(dt.p, dt.S, dt.L; warmup=5000, sample=10000, sgld_a=1e-1);
 
 bfile = proj_output * "bayes-" * file;
 save_bayes(losses, parameters, ks, ks_times; file=bfile);
