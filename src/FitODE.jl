@@ -1,6 +1,7 @@
 module FitODE
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
 		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
+using MMAColors
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
 			calc_gradient, save_data, load_data, read_data
 # re-export from DiffEqFlux
@@ -46,9 +47,6 @@ export gradient, mma
 
 # ode_data, u0, tspan, tsteps, ode_data_orig = FitODE.read_data(S);
 # dudt, ode!, predict = FitODE.setup_diffeq_func(S);
-
-mma = [RGB(0.3684,0.50678,0.7098),RGB(0.8807,0.61104,0.14204),
-				RGB(0.56018,0.69157,0.19489), RGB(0.92253,0.38563,0.20918)];
 
 struct loss_args
 	u0

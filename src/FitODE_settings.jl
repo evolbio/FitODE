@@ -55,7 +55,7 @@ max_it = 200		# max iterates for each incremental learning step
 print_grad = true	# show gradient on terminal, requires significant overhead
 
 start_time = Dates.format(now(),"yyyymmdd_HHMMSS")
-proj_dir = "/Users/steve/sim/zzOtherLang/julia/FitODE"
+proj_dir = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE"
 csv_file = "$proj_dir/input/lynx_hare_data.csv"
 out_file = "/Users/steve/Desktop/" * start_time * ".jld2"
 

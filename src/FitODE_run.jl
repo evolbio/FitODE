@@ -64,8 +64,8 @@ using FitODE_plots
 # dt = load_data(S.out_file);
 
 # Or for saved outputs from prior runs
-proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n3-1.jld2"; 		# fill this in with desired file name
+proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
+file = "node-n3-1.jld2"; 		# fill this in with desired file name
 dt = load_data(proj_output * file);
 
 # Or for any file path		
@@ -93,8 +93,8 @@ plot_phase(dt.L.ode_data, dt.pred)
 using FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
-proj_output = "/Users/steve/sim/zzOtherLang/julia/FitODE/output/";
-file = "ode-n3-1.jld2"; 		# fill this in with desired file base name
+proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
+file = "node-n3-1.jld2"; 		# fill this in with desired file base name
 dt = load_data(proj_output * file);
 
 # for NODE or with ODE with n>=4, try lower a, such as 2e-3 or 1e-3 or lower
