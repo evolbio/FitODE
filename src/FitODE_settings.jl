@@ -36,6 +36,10 @@ end
 use_node = false	# switch between NODE and ODE
 layer_size = 20		# size of layers for NODE
 
+# fraction of time series to use for training, rest can be used to test prediction
+# truncates training data as train_data[train_data .<= train_frac*train_data[end]]
+train_frac = 1.0	# 1.0 means use all data for training
+
 # number of variables to track in (N)ODE, first two are hare and lynx
 n = 3 					# must be >= 2, number dummy variables is n-2
 nsqr = n*n

@@ -1,9 +1,8 @@
 module FitODE
 using CSV, DataFrames, Statistics, Distributions, Interpolations, QuadGK,
-		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2
-using MMAColors
+		DiffEqFlux, DifferentialEquations, Printf, Plots, JLD2, Parameters
 export callback, loss, weights, fit_diffeq, refine_fit, refine_fit_bfgs,
-			calc_gradient, save_data, load_data, read_data
+			calc_gradient, save_data, load_data, read_data, make_loss_args_all
 # re-export from DiffEqFlux
 export gradient, mma
 
@@ -41,6 +40,12 @@ export gradient, mma
 # See comments in FitODE_settings.jl
 
 ####################################################################
+# colors, see MMAColors.jl in my private modules
+
+mma = [RGB(0.3684,0.50678,0.7098),RGB(0.8807,0.61104,0.14204),
+			RGB(0.56018,0.69157,0.19489), RGB(0.92253,0.38563,0.20918)];
+
+####################################################################
 
 # These functions called w/in module, no need to call directly.
 # However, can be useful for debugging in interactive session.
@@ -48,15 +53,24 @@ export gradient, mma
 # ode_data, u0, tspan, tsteps, ode_data_orig = FitODE.read_data(S);
 # dudt, ode!, predict = FitODE.setup_diffeq_func(S);
 
-struct loss_args
+@with_kw struct loss_args
 	u0
-	prob
+	prob				# problem for training data period only
 	predict
 	ode_data
 	ode_data_orig
-	tsteps
+	tsteps				# steps for training data period only
 	w
 end
+
+# When fit only to training data subset, then need full time period info
+struct all_time
+	prob_all			# problem for full data set	
+	tsteps_all			# steps for full data set
+end
+
+make_loss_args_all(L::loss_args, A::all_time) =
+					loss_args(L; prob=A.prob_all, tsteps=A.tsteps_all)
 
 function read_data(S)
 	# Read data and store in matrix ode_data, row 1 for hare, row 2 for lynx
@@ -180,6 +194,14 @@ function fit_diffeq(S)
 	ode_data, u0, tspan, tsteps, ode_data_orig = FitODE.read_data(S);
 	dudt, ode!, predict = FitODE.setup_diffeq_func(S);
 	
+	# If using subset of data for training then keep original and truncate tsteps
+	tsteps_all = copy(tsteps)
+	tspan_all = tspan
+	if (train_frac < 1)
+		tsteps = tsteps[tsteps .<= S.train_frac*tsteps[end]]
+		tspan = (tsteps[begin], tsteps[end])
+	end
+	
 	beta_a = 1:S.wt_incr:S.wt_steps
 	if !S.use_node p_init = 0.1*rand(S.nsqr + S.n) end; # n^2 matrix plus n for individual growth
 	
@@ -210,14 +232,25 @@ function fit_diffeq(S)
 	# To prepare for final fitting and calculations, must set prob to full training
 	# period with tspan and tsteps and then redefine loss_args values in L
 	prob = S.use_node ?
-				NeuralODE(dudt, tspan, S.solver, saveat = tsteps, 
+			NeuralODE(dudt, tspan, S.solver, saveat = tsteps, 
 					reltol = S.rtolR, abstol = S.atolR) :
-				ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
+			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 					tspan, p_init, saveat = tsteps, reltol = S.rtolR, abstol = S.atolR)
+	if (train_frac == 1.0)
+		prob_all = prob
+	else
+		prob_all = S.use_node ?
+			NeuralODE(dudt, tspan_all, S.solver, saveat = tsteps_all, 
+					reltol = S.rtolR, abstol = S.atolR) :
+			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0, tspan_all, 
+					p_init, saveat = tsteps_all, reltol = S.rtolR, abstol = S.atolR)
+		
+	end
 	w = ones(2,length(tsteps))
 	L = loss_args(u0,prob,predict,ode_data,ode_data_orig,tsteps,w)
+	A = all_time(prob_all, tsteps_all)
 	p_opt = refine_fit(result.u, S, L)
-	return p_opt, L
+	return p_opt, L, A
 end
 
 function refine_fit(p, S, L; rate_div=5.0, iter_mult=2.0)
@@ -245,12 +278,39 @@ function refine_fit_bfgs(p, S, L)
 	return result.u
 end
 
-save_data(p, S, L, loss_v, pred; file=S.out_file) = jldsave(file; p, S, L, loss_v, pred)
+# particular data saved changes with versions of program
+# could send tuple rather than naming variables but helps to have
+# named variables here to check that currently required variables are
+# saved
+save_data(p, S, L, L_all, loss_v, pred; file=S.out_file) =
+			jldsave(file; p, S, L, L_all, loss_v, pred)
 
+# jld2 stores data as Dict with keys as strings
+# to return named tuple, must first transform to dict with keys as symbols
+#	see https://www.reddit.com/r/Julia/comments/8aw93w
+# then use ... operator to transform dict w/symbol keys to named tuple
+#	see https://discourse.julialang.org/t/10899/8?page=2
+# Disadvantage of loading whatever is saved is that no checking for particular
+# variables is made, so caller must check that required variables present
 function load_data(file)
-	dt = load(file)
-	(p = dt["p"], S = dt["S"], L = dt["L"], loss_v = dt["loss_v"], pred = dt["pred"])
+	dt_string_keys = load(file)
+	dt_symbol_keys = Dict()
+	for (k,v) in dt_string_keys
+    	dt_symbol_keys[Symbol(k)] = v
+	end
+	println("\nWarning may occur if loaded data struct not defined or")
+	println("differs from current definition of that structure. Check keys")
+	println("in returned named tuple by using keys() on returned value. Check")
+	println("if a required key is missing and adjust accordingly.\n")
+	(; dt_symbol_keys...)
 end
-	
+
+# Can check for specific keys in load by this function, if required key
+# is missing, should throw an error
+function load_data_old(file)
+	dt = load(file)
+	(p = dt["p"], S = dt["S"], L = dt["L"], L_all = dt["L_all"],
+						loss_v = dt["loss_v"], pred = dt["pred"])
+end
 
 end # module

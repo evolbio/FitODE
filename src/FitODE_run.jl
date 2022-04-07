@@ -35,7 +35,13 @@ S = default_ode();
 # S = recalc_settings(S)
 
 # L is struct that includes u0, ode_data, tsteps, see struct loss_args for other parts
-p_opt1,L = fit_diffeq(S)
+# A is struct that includes tsteps_all and prob_all, used if S.train_frac < 1 that
+# splits data into initial training period and later period used to compare w/prediction
+p_opt1,L,A = fit_diffeq(S)
+
+# If using a subset of data for training, then need L_all with full time period for all data
+# L always refers to training period, which may or may not be all time steps
+L_all = (S.train_frac < 1) ? make_loss_args_all(L, A) : L
 
 # bfgs sometimes fails, if so then use p_opt1
 # see definition of refine_fit() for other options to refine fit
@@ -54,7 +60,13 @@ gnorm = sqrt(sum(abs2, grad))
 
 # save results
 
-save_data(p, S, L, loss_v, pred; file=S.out_file)
+save_data(p, S, L, L_all, loss_v, pred; file=S.out_file)
+
+# To use following steps, move saved out_file to proj_output using 
+# example in following steps
+
+# earlier version of program did not define S.train_frac or save L_all
+# check with @isdefined before using any steps that require these vars
 
 #############################  Plotting  ###################################
 
@@ -65,8 +77,10 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
-file = "node-n3-1.jld2"; 		# fill this in with desired file name
-dt = load_data(proj_output * file);
+train_time = "all";						# e.g., "all", "60", "75", etc
+train = "train_" * train_time * "/"; 	# directory for training period
+file = "node-n3-1.jld2"; 				# fill this in with desired file name
+dt = load_data(proj_output * train * file);
 
 # Or for any file path		
 # dt = load_data("file_path");
@@ -94,18 +108,26 @@ using FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
-file = "node-n3-1.jld2"; 		# fill this in with desired file base name
-dt = load_data(proj_output * file);
+train_time = "all";						# e.g., "all", "60", "75", etc
+train = "train_" * train_time * "/"; 	# directory for training period
+file = "node-n3-1.jld2"; 				# fill this in with desired file name
+bfile = proj_output * train * "bayes-" * file;
+dfile = proj_output * train * file;
+
+dt = load_data(dfile);					# check loaded data vars with keys(dt)
+
+# If calculating approx bayes posterior, start here
+# If loading previous calculations, skip to load_bayes()
 
 # for NODE or with ODE with n>=4, try lower a, such as 2e-3 or 1e-3 or lower
 # experiment with SGLD parameters, see pSGLD struct in FitODE_bayes
 B = pSGLD(warmup=5000, sample=10000, a=5e-4)
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L, B)
-
-bfile = proj_output * "bayes-" * file;
 save_bayes(B, losses, parameters, ks, ks_times; file=bfile);
-bt = load_bayes(bfile);
+
+# If loading previous results from psgld_sample(), skip previous three steps
+bt = load_bayes(bfile);					# check loaded data vars with keys(bt)
 
 # look at decay of epsilon over time
 plot_sgld_epsilon(15000; a=bt.B.a, b=bt.B.a, g=bt.B.g)
