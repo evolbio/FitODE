@@ -110,13 +110,13 @@ plot_phase(dt; use_all=true)
 
 ################### Approx Bayes, split training and prediction ##################
 
-using FitODE_bayes, Plots, StatsPlots
+using FitODE, FitODE_bayes, Plots, StatsPlots
 
 # If reloading data needed
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
-train_time = "all";						# e.g., "all", "60", "75", etc
+train_time = "60";						# e.g., "all", "60", "75", etc
 train = "train_" * train_time * "/"; 	# directory for training period
-file = "node-n3-1.jld2"; 				# fill this in with desired file name
+file = "ode-n3-1.jld2"; 				# fill this in with desired file name
 bfile = proj_output * train * "bayes-" * file;
 dfile = proj_output * train * file;
 
