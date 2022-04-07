@@ -70,7 +70,8 @@ struct all_time
 end
 
 make_loss_args_all(L::loss_args, A::all_time) =
-					loss_args(L; prob=A.prob_all, tsteps=A.tsteps_all)
+					loss_args(L; prob=A.prob_all, tsteps=A.tsteps_all,
+					w=ones(length(L.ode_data[:,1]),length(L.ode_data[1,:])))
 
 function read_data(S)
 	# Read data and store in matrix ode_data, row 1 for hare, row 2 for lynx
@@ -197,7 +198,7 @@ function fit_diffeq(S)
 	# If using subset of data for training then keep original and truncate tsteps
 	tsteps_all = copy(tsteps)
 	tspan_all = tspan
-	if (train_frac < 1)
+	if (S.train_frac < 1)
 		tsteps = tsteps[tsteps .<= S.train_frac*tsteps[end]]
 		tspan = (tsteps[begin], tsteps[end])
 	end
@@ -236,7 +237,7 @@ function fit_diffeq(S)
 					reltol = S.rtolR, abstol = S.atolR) :
 			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, S.n, S.nsqr), u0,
 					tspan, p_init, saveat = tsteps, reltol = S.rtolR, abstol = S.atolR)
-	if (train_frac == 1.0)
+	if (S.train_frac == 1.0)
 		prob_all = prob
 	else
 		prob_all = S.use_node ?

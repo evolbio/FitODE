@@ -31,6 +31,10 @@ S = default_ode();
 # can reset individual fields in settings
 # S = Settings(S; n=3, opt_dummy_u0 = true)
 # S = Settings(S; n=4, max_it = 500)	# n=4 needs more iterates
+
+# train on part of data: if end is 90, 60/90 => 60, 75/90 = 75, etc.
+# S = Settings(S; train_frac = 60/90);	
+
 # if resetting particular fields in S, should rerun calculated fields by doing
 # S = recalc_settings(S)
 
@@ -41,7 +45,7 @@ p_opt1,L,A = fit_diffeq(S)
 
 # If using a subset of data for training, then need L_all with full time period for all data
 # L always refers to training period, which may or may not be all time steps
-L_all = (S.train_frac < 1) ? make_loss_args_all(L, A) : L
+L_all = (S.train_frac < 1) ? make_loss_args_all(L, A) : L;
 
 # bfgs sometimes fails, if so then use p_opt1
 # see definition of refine_fit() for other options to refine fit
@@ -77,9 +81,9 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
-train_time = "all";						# e.g., "all", "60", "75", etc
+train_time = "60";						# e.g., "all", "60", "75", etc
 train = "train_" * train_time * "/"; 	# directory for training period
-file = "node-n3-1.jld2"; 				# fill this in with desired file name
+file = "ode-n3-1.jld2"; 				# fill this in with desired file name
 dt = load_data(proj_output * train * file);
 
 # Or for any file path		
@@ -92,7 +96,9 @@ dt = load_data(proj_output * train * file);
 
 # compare original data to smoothed target data for fitting
 plot_data_orig_smooth(dt.S)		# requires rereading data from disk, a bit slower
-plot_data_orig_smooth(dt.L.ode_data, dt.L.tsteps, dt.L.ode_data_orig) # a bit faster
+plot_data_orig_smooth(dt.L.ode_data, dt.L_all.tsteps, dt.L.ode_data_orig) # a bit faster
+
+# FIX NEXT PLOT TO HANDLE WHETHER USING TRAIN PERIOD OR FULL PERIOD
 
 # compare predicted values to smoothed data
 plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred)
@@ -100,7 +106,7 @@ plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true)
 plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true,
 					num_dim=size(dt.pred,1))
 
-plot_phase(dt.L.ode_data, dt.pred)
+plot_phase(dt; use_all=true)
 
 ################### Approx Bayes, split training and prediction ##################
 
