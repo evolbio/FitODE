@@ -100,11 +100,11 @@ plot_data_orig_smooth(dt.L.ode_data, dt.L_all.tsteps, dt.L.ode_data_orig) # a bi
 
 # FIX NEXT PLOT TO HANDLE WHETHER USING TRAIN PERIOD OR FULL PERIOD
 
-# compare predicted values to smoothed data
-plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred)
-plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true)
-plot_target_pred(dt.L.tsteps, dt.L.ode_data, dt.pred; show_lines=true,
-					num_dim=size(dt.pred,1))
+# compare predicted values to smoothed data, use_all for plot beyond training period
+plot_target_pred(dt)
+plot_target_pred(dt; show_lines=true)
+plot_target_pred(dt; show_lines=true, num_dim=size(dt.pred,1))
+plot_target_pred(dt; show_lines=true, use_all=false)	# show training period only
 
 plot_phase(dt; use_all=true)
 

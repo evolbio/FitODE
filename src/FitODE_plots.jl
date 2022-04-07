@@ -5,22 +5,30 @@ export plot_target_pred, plot_phase, plot_data_orig_smooth
 num_rows(matr) = size(matr,1)
 array_to_tuple(arr) = (arr...,)
 
-function plot_target_pred(tsteps, target, pred; show_lines = false,
-			num_dim = num_rows(target), target_labels = ("hare", "lynx"))
+function plot_target_pred(dt; show_lines = false, use_all = true,
+			num_dim = num_rows(dt.L.ode_data), target_labels = ("hare", "lynx"))
+	x = 1.25		# linewidth
+	train_line, target, pred, train_end, all_end = setup_train(dt, use_all)
 	target_dim = num_rows(target)
 	num_labels = length(target_labels)
 	@assert num_rows(pred) >= target_dim
 	@assert num_rows(pred) >= num_dim
 	labels = [i<=num_labels ? target_labels[i] : "none" for i in 1:num_dim]
-	len = length(pred[1,:])
-	ts = tsteps[1:len]
+	ts = dt.L_all.tsteps
 	plt = plot(size=(600,400 * num_dim), layout=(num_dim,1))
 	plot_type! = if show_lines plot! else scatter! end
+	last_time = use_all ? all_end : train_end
 	for i in 1:num_dim
 		if target_dim >= i
-			plot_type!(ts, target[i,1:len], label = labels[i], subplot=i, color=1)
+			plot_type!(ts[1:last_time], target[i,1:last_time], label = labels[i],
+					linewidth=x, subplot=i, color=mma[1])
 		end
-		plot_type!(ts, pred[i,:], label = "pred", subplot=i, color=2)
+		plot_type!(ts[1:last_time], pred[i,1:last_time], label = "pred",
+					linewidth=x, subplot=i, color=mma[2])
+		if use_all && all_end > train_end
+			plot!([ts[train_end]], seriestype =:vline, color = :black, linestyle =:dot,
+				linewidth=1.5, label = "train", subplot=i)
+		end
 	end
 	display(plot(plt))	
 end
@@ -46,6 +54,7 @@ function plot_phase(dt; dummy_dim = true, use_all = true)
 	train_line, target, pred, train_end, all_end = setup_train(dt, use_all)
 	
 	w = 1.25	# linewidth
+	
 	@assert num_rows(target) <= 3 "More than 3 target dimensions, fix code"
 	target_dim = num_rows(target)
 	pred_dim = num_rows(pred)
