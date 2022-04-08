@@ -63,8 +63,13 @@ grad = calc_gradient(p,S,L)
 gnorm = sqrt(sum(abs2, grad))
 
 # save results
-
 save_data(p, S, L, L_all, loss_v, pred; file=S.out_file)
+
+# test loading
+dt_test = load_data(S.out_file);
+keys(dt_test)
+
+# If OK, then move out_file to standard location and naming for runs
 
 # To use following steps, move saved out_file to proj_output using 
 # example in following steps
@@ -110,7 +115,7 @@ plot_phase(dt; use_all=true)
 
 ################### Approx Bayes, split training and prediction ##################
 
-using FitODE, FitODE_bayes, Plots, StatsPlots
+using FitODE, FitODE_bayes, FitODE_settings, Plots, StatsPlots
 
 # If reloading data needed
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
@@ -158,5 +163,5 @@ plot_autocorr_hist(bt.parameters,10)	# distn for 10th lag over all parameters
 
 # trajectories sampled from posterior parameter distn
 
-plot_traj_bayes(bt.parameters,dt.L,dt.S; samples=20)
+plot_traj_bayes(bt.parameters,dt; samples=20)
 

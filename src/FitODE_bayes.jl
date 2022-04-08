@@ -139,19 +139,6 @@ plot_moving_ave(data, n) =
 	display(plot(n/2 .+ Array(1:(length(data)-(n-1))),
 		[sum(@view data[i:(i+n-1)])/n for i in 1:(length(data)-(n-1))]))
 
-# DELETE WHEN DONE TESTING	
-# function plot_traj_bayes(param, L, S; samples=20)
-# 	plt = plot(size=(600,800), layout=(2,1))
-# 	for i in 1:samples 
-# 		pred = L.predict(param[rand(1:length(param))], L.prob, L.u0)
-# 		plot!(L.tsteps,pred[1,:], color=mma[2], label="", subplot=1)
-# 		plot!(L.tsteps,pred[2,:], color=mma[2], label="", subplot=2)
-# 	end
-# 	plot!(L.tsteps, L.ode_data[1,:], color=mma[1], linewidth=3, label="hare", subplot=1)
-# 	plot!(L.tsteps, L.ode_data[2,:], color=mma[1], linewidth=3, label="lynx", subplot=2)
-# 	display(plt)
-# end
-
 function plot_traj_bayes(param, dt; samples=20)
 	plt = plot(size=(600,800), layout=(2,1))
 	La = dt.L_all
