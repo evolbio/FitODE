@@ -36,7 +36,7 @@ S = default_ode();
 # S = Settings(S; train_frac = 60/90);	
 
 # if resetting particular fields in S, should rerun calculated fields by doing
-# S = recalc_settings(S)
+# S = recalc_settings(S);
 
 # L is struct that includes u0, ode_data, tsteps, see struct loss_args for other parts
 # A is struct that includes tsteps_all and prob_all, used if S.train_frac < 1 that
@@ -47,9 +47,16 @@ p_opt1,L,A = fit_diffeq(S)
 # L always refers to training period, which may or may not be all time steps
 L_all = (S.train_frac < 1) ? make_loss_args_all(L, A) : L;
 
-# bfgs sometimes fails, if so then use p_opt1
-# see definition of refine_fit() for other options to refine fit
 p_opt2 = refine_fit_bfgs(p_opt1,S,L)
+
+# run bfgs a second time if desired
+# p_opt2 = refine_fit_bfgs(p_opt2,S,L)
+
+# bfgs sometimes fails, if so then use p_opt1 or try repeating refine_fit
+# p_opt2 = refine_fit(p_opt1,S,L)
+
+# see definition of refine_fit() for other options to refine fit, can repeat that
+# alternatively, may be options for ode solver and tolerances that would allow bfgs
 
 loss1, _, _, pred1 = loss(p_opt1,S,L);		# use if p_opt2 fails or p_opt1 of interest
 loss2, _, _, pred2 = loss(p_opt2,S,L);
@@ -86,9 +93,9 @@ using FitODE_plots
 
 # Or for saved outputs from prior runs
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
-train_time = "60";						# e.g., "all", "60", "75", etc
+train_time = "all";						# e.g., "all", "60", "75", etc
 train = "train_" * train_time * "/"; 	# directory for training period
-file = "ode-n3-1.jld2"; 				# fill this in with desired file name
+file = "node-n2-1.jld2"; 				# fill this in with desired file name
 dt = load_data(proj_output * train * file);
 
 # Or for any file path		
@@ -121,7 +128,7 @@ using FitODE, FitODE_bayes, FitODE_settings, Plots, StatsPlots
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
 train_time = "60";						# e.g., "all", "60", "75", etc
 train = "train_" * train_time * "/"; 	# directory for training period
-file = "ode-n3-1.jld2"; 				# fill this in with desired file name
+file = "ode-n2-1.jld2"; 				# fill this in with desired file name
 bfile = proj_output * train * "bayes-" * file;
 dfile = proj_output * train * file;
 
@@ -132,7 +139,9 @@ dt = load_data(dfile);					# check loaded data vars with keys(dt)
 
 # for NODE or with ODE with n>=4, try lower a, such as 2e-3 or 1e-3 or lower
 # experiment with SGLD parameters, see pSGLD struct in FitODE_bayes
-B = pSGLD(warmup=5000, sample=10000, a=5e-4)
+# If first call to psgld_sample gives large loss, may be that gradient
+# is small causing large stochastic term, try using pre_λ=1e-1 or other values
+B = pSGLD(warmup=5000, sample=10000, a=5e-4, pre_λ=1e-8)
 
 losses, parameters, ks, ks_times = psgld_sample(dt.p, dt.S, dt.L, B)
 save_bayes(B, losses, parameters, ks, ks_times; file=bfile);

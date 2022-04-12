@@ -99,8 +99,8 @@ function plot_data_orig_smooth(S; labels = ("hare", "lynx"))
 	labels = [i<=length(labels) ? labels[i] : "none" for i in 1:num_dim]
 	plt = plot(size=(600,400*num_dim), layout=(num_dim,1))
 	for i in 1:num_dim
-		scatter!(tsteps_orig, orig[i,:], color=i, label=nothing, subplot=i)
-		plot!(tsteps_smooth, smooth[i,:], color=i, label=labels[i], subplot=i)
+		scatter!(tsteps_orig, orig[i,:], color=mma[i], label=nothing, subplot=i)
+		plot!(tsteps_smooth, smooth[i,:], color=mma[i], linewidth=2, label=labels[i], subplot=i)
 	end
 	display(plt)
 end
@@ -115,9 +115,10 @@ function plot_data_orig_smooth(smooth, tsteps_smooth, orig; labels = ("hare", "l
 	plt = plot(size=(600,400*num_dim), layout=(num_dim,1))
 	for i in 1:num_dim
 		scatter!(tsteps_orig, orig[i,:], color=mma[i], label=nothing, subplot=i)
-		plot!(tsteps_smooth, smooth[i,:], color=mma[i], label=labels[i], subplot=i)
+		plot!(tsteps_smooth, smooth[i,:], color=mma[i], linewidth=2, label=labels[i], subplot=i)
 	end
 	display(plt)
+	return(plt)
 end
 
 end # module
