@@ -1,5 +1,5 @@
 module FitODE_plots
-using Plots, FitODE
+using Plots, FitODE, Printf
 export plot_target_pred, plot_phase, plot_data_orig_smooth
 
 num_rows(matr) = size(matr,1)
@@ -8,6 +8,9 @@ array_to_tuple(arr) = (arr...,)
 function plot_target_pred(dt; show_lines = false, use_all = true,
 			num_dim = num_rows(dt.L.ode_data), target_labels = ("hare", "lynx"))
 	x = 1.25		# linewidth
+	title = (dt.S.use_node) ? "NODE n = " : "ODE n = "
+	title *= string(dt.S.n)
+	title *= @sprintf("; loss = %-6.2f",dt.loss_v)
 	train_line, target, pred, train_end, all_end = setup_train(dt, use_all)
 	target_dim = num_rows(target)
 	num_labels = length(target_labels)
@@ -15,7 +18,8 @@ function plot_target_pred(dt; show_lines = false, use_all = true,
 	@assert num_rows(pred) >= num_dim
 	labels = [i<=num_labels ? target_labels[i] : "none" for i in 1:num_dim]
 	ts = dt.L_all.tsteps
-	plt = plot(size=(600,400 * num_dim), layout=(num_dim,1))
+	plt = plot(size=(600,400 * num_dim), layout=(num_dim,1),
+				plot_title=title)
 	plot_type! = if show_lines plot! else scatter! end
 	last_time = use_all ? all_end : train_end
 	for i in 1:num_dim
@@ -30,7 +34,8 @@ function plot_target_pred(dt; show_lines = false, use_all = true,
 				linewidth=1.5, label = "train", subplot=i)
 		end
 	end
-	display(plot(plt))	
+	display(plt)
+	return(plt)
 end
 
 function setup_train(dt, use_all)

@@ -54,8 +54,10 @@ p_opt2 = refine_fit_bfgs(p_opt1,S,L)
 
 # bfgs sometimes fails, if so then use p_opt1 or try repeating refine_fit
 # p_opt2 = refine_fit(p_opt1,S,L)
+# and again if needed
+# p_opt2 = refine_fit(p_opt2,S,L)
 
-# see definition of refine_fit() for other options to refine fit, can repeat that
+# see definition of refine_fit() for other options to refine fit
 # alternatively, may be options for ode solver and tolerances that would allow bfgs
 
 loss1, _, _, pred1 = loss(p_opt1,S,L);		# use if p_opt2 fails or p_opt1 of interest
@@ -86,7 +88,7 @@ keys(dt_test)
 
 #############################  Plotting  ###################################
 
-using FitODE_plots
+using FitODE_plots, Plots, Measures
 
 # If S is current and will be used
 # dt = load_data(S.out_file);
@@ -110,8 +112,6 @@ dt = load_data(proj_output * train * file);
 plot_data_orig_smooth(dt.S)		# requires rereading data from disk, a bit slower
 plot_data_orig_smooth(dt.L.ode_data, dt.L_all.tsteps, dt.L.ode_data_orig) # a bit faster
 
-# FIX NEXT PLOT TO HANDLE WHETHER USING TRAIN PERIOD OR FULL PERIOD
-
 # compare predicted values to smoothed data, use_all for plot beyond training period
 plot_target_pred(dt)
 plot_target_pred(dt; show_lines=true)
@@ -119,6 +119,29 @@ plot_target_pred(dt; show_lines=true, num_dim=size(dt.pred,1))
 plot_target_pred(dt; show_lines=true, use_all=false)	# show training period only
 
 plot_phase(dt; use_all=true)
+
+#########################  Plot multiple runs  ###################################
+using FitODE_plots, Plots, Measures
+
+proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
+train_time = "all";						# e.g., "all", "60", "75", etc
+train = "train_" * train_time * "/"; 	# directory for training period
+
+ode = ["ode-n" * string(i) * "-1.jld2" for i in 2:4];
+node = ["n" * x for x in ode];
+# interleave vectors a and b by [a b]'[:], but for strings, use permutedims
+files = [proj_output * train * file for file in permutedims([ode node])[:]];
+
+plts = []
+for f in files
+	dt = load_data(f)
+	push!(plts, plot_target_pred(dt; show_lines=true, num_dim=size(dt.pred,1)))
+end
+plt = plot(plts..., size=(1200,1800), layout=grid(3,2,heights=[2/9,3/9,4/9]),
+		linewidth=2, top_margin=-10mm, bottom_margin=8mm)
+
+Plots.pdf(plt, "/Users/steve/Desktop/dynamics.pdf")
+
 
 ################### Approx Bayes, split training and prediction ##################
 

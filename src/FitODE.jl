@@ -47,6 +47,8 @@ mma = [RGB(0.3684,0.50678,0.7098),RGB(0.8807,0.61104,0.14204),
 
 ####################################################################
 
+load_data_warning = true
+
 # These functions called w/in module, no need to call directly.
 # However, can be useful for debugging in interactive session.
 
@@ -294,15 +296,19 @@ save_data(p, S, L, L_all, loss_v, pred; file=S.out_file) =
 # Disadvantage of loading whatever is saved is that no checking for particular
 # variables is made, so caller must check that required variables present
 function load_data(file)
+	global load_data_warning
 	dt_string_keys = load(file)
 	dt_symbol_keys = Dict()
 	for (k,v) in dt_string_keys
     	dt_symbol_keys[Symbol(k)] = v
 	end
-	println("\nWarning may occur if loaded data struct not defined or")
-	println("differs from current definition of that structure. Check keys")
-	println("in returned named tuple by using keys() on returned value. Check")
-	println("if a required key is missing and adjust accordingly.\n")
+	if load_data_warning
+		println("\nWarning may occur if loaded data struct not defined or")
+		println("differs from current definition of that structure. Check keys")
+		println("in returned named tuple by using keys() on returned value. Check")
+		println("if a required key is missing and adjust accordingly.\n")
+		load_data_warning = false
+	end
 	(; dt_symbol_keys...)
 end
 
