@@ -120,7 +120,7 @@ plot_target_pred(dt; show_lines=true, use_all=false)	# show training period only
 
 plot_phase(dt; use_all=true)
 
-#########################  Plot multiple runs  ###################################
+#########################  Plot multiple target_pred runs  #######################
 using FitODE_plots, Plots, Measures
 
 proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
@@ -142,6 +142,26 @@ plt = plot(plts..., size=(1200,1800), layout=grid(3,2,heights=[2/9,3/9,4/9]),
 		linewidth=3, top_margin=-10mm, bottom_margin=8mm)
 
 Plots.pdf(plt, "/Users/steve/Desktop/dynamics.pdf")
+
+############################  Plot multiple phase runs  ##########################
+using FitODE_plots, Plots, Measures
+
+# compare phase plots for ODE and NODE for n=3
+proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
+train_time = "all";						
+train = "train_" * train_time * "/";
+ofile = "ode-n3-1.jld2";
+nfile = "n" * ofile;
+dt_o = load_data(proj_output * train * ofile);
+dt_n = load_data(proj_output * train * nfile);
+
+plts = [];
+push!(plts, plot_phase(dt_o; use_all=true));
+push!(plts, plot_phase(dt_n; use_all=true));
+
+plt = plot(plts..., size=(950,800), layout=(1,2))
+
+Plots.pdf(plt, "/Users/steve/Desktop/phase.pdf")
 
 ################### Approx Bayes, split training and prediction ##################
 
