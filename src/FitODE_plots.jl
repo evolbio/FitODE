@@ -1,5 +1,5 @@
 module FitODE_plots
-using Plots, FitODE, Printf
+using Plots, FitODE, Printf, Measures
 export plot_target_pred, plot_phase, plot_data_orig_smooth
 
 num_rows(matr) = size(matr,1)
@@ -8,6 +8,8 @@ array_to_tuple(arr) = (arr...,)
 function plot_target_pred(dt; show_lines = false, use_all = true,
 			num_dim = num_rows(dt.L.ode_data), target_labels = ("hare", "lynx"))
 	x = 1.25		# linewidth
+	pred_label = (target_labels[1] == "") ? "" : "pred"
+	train_label = (target_labels[1] == "") ? "" : "train"
 	title = (dt.S.use_node) ? "NODE n = " : "ODE n = "
 	title *= string(dt.S.n)
 	title *= @sprintf("; loss = %-6.2f",dt.loss_v)
@@ -25,13 +27,13 @@ function plot_target_pred(dt; show_lines = false, use_all = true,
 	for i in 1:num_dim
 		if target_dim >= i
 			plot_type!(ts[1:last_time], target[i,1:last_time], label = labels[i],
-					linewidth=x, subplot=i, color=mma[1])
+					linewidth=x, subplot=i, color=(i==1) ? mma[1] : mma[3])
 		end
-		plot_type!(ts[1:last_time], pred[i,1:last_time], label = "pred",
+		plot_type!(ts[1:last_time], pred[i,1:last_time], label = pred_label,
 					linewidth=x, subplot=i, color=mma[2])
 		if use_all && all_end > train_end
 			plot!([ts[train_end]], seriestype =:vline, color = :black, linestyle =:dot,
-				linewidth=1.5, label = "train", subplot=i)
+				linewidth=1.5, label = train_label, subplot=i)
 		end
 	end
 	display(plt)
@@ -104,8 +106,10 @@ function plot_data_orig_smooth(S; labels = ("hare", "lynx"))
 	labels = [i<=length(labels) ? labels[i] : "none" for i in 1:num_dim]
 	plt = plot(size=(600,400*num_dim), layout=(num_dim,1))
 	for i in 1:num_dim
-		scatter!(tsteps_orig, orig[i,:], color=mma[i], label=nothing, subplot=i)
-		plot!(tsteps_smooth, smooth[i,:], color=mma[i], linewidth=2, label=labels[i], subplot=i)
+		i_col = (i == 1) ? 1 : 3
+		scatter!(tsteps_orig, orig[i,:], color=mma[i_col], label=nothing, subplot=i)
+		plot!(tsteps_smooth, smooth[i,:], color=mma[i_col], linewidth=2,
+				label=labels[i], subplot=i)
 	end
 	display(plt)
 end
@@ -119,8 +123,10 @@ function plot_data_orig_smooth(smooth, tsteps_smooth, orig; labels = ("hare", "l
 	labels = [i<=length(labels) ? labels[i] : "none" for i in 1:num_dim]
 	plt = plot(size=(600,400*num_dim), layout=(num_dim,1))
 	for i in 1:num_dim
-		scatter!(tsteps_orig, orig[i,:], color=mma[i], label=nothing, subplot=i)
-		plot!(tsteps_smooth, smooth[i,:], color=mma[i], linewidth=2, label=labels[i], subplot=i)
+		i_col = (i == 1) ? 1 : 3
+		scatter!(tsteps_orig, orig[i,:], color=mma[i_col], label=nothing, subplot=i)
+		plot!(tsteps_smooth, smooth[i,:], color=mma[i_col], linewidth=2,
+				label=labels[i], subplot=i)
 	end
 	display(plt)
 	return(plt)

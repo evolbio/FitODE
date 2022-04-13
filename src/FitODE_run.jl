@@ -135,13 +135,13 @@ files = [proj_output * train * file for file in permutedims([ode node])[:]];
 plts = []
 for f in files
 	dt = load_data(f)
-	push!(plts, plot_target_pred(dt; show_lines=true, num_dim=size(dt.pred,1)))
+	push!(plts, plot_target_pred(dt; show_lines=true, num_dim=size(dt.pred,1),
+				target_labels=("","")))
 end
 plt = plot(plts..., size=(1200,1800), layout=grid(3,2,heights=[2/9,3/9,4/9]),
-		linewidth=2, top_margin=-10mm, bottom_margin=8mm)
+		linewidth=3, top_margin=-10mm, bottom_margin=8mm)
 
 Plots.pdf(plt, "/Users/steve/Desktop/dynamics.pdf")
-
 
 ################### Approx Bayes, split training and prediction ##################
 
@@ -197,3 +197,27 @@ plot_autocorr_hist(bt.parameters,10)	# distn for 10th lag over all parameters
 
 plot_traj_bayes(bt.parameters,dt; samples=20)
 
+#########################  Plot multiple Bayes runs  #############################
+using FitODE_bayes, FitODE_plots, Plots, Measures
+
+proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
+train_time = "60";						# e.g., "all", "60", "75", etc
+train = "train_" * train_time * "/"; 	# directory for training period
+
+ode = ["ode-n" * string(i) * "-1.jld2" for i in 2:4];
+node = ["n" * x for x in ode];
+# interleave vectors a and b by [a b]'[:], but for strings, use permutedims
+dfiles = [proj_output * train * file for file in permutedims([ode node])[:]];
+bfiles = [proj_output * train * "bayes-" * file for file in permutedims([ode node])[:]];
+files = [(dfiles[i],bfiles[i]) for i in 1:length(dfiles)];
+
+plts = []
+for ftuple in files
+	dt = load_data(ftuple[1])
+	bt = load_bayes(ftuple[2])
+	push!(plts, plot_traj_bayes(bt.parameters,dt; samples=30,labels=false,
+					multi=true, title=true, limits=true))
+end
+plt = plot(plts..., size=(900,1000), layout=grid(3,2),top_margin=-9mm, bottom_margin=6mm)
+
+Plots.pdf(plt, "/Users/steve/Desktop/bayes.pdf")

@@ -139,27 +139,44 @@ plot_moving_ave(data, n) =
 	display(plot(n/2 .+ Array(1:(length(data)-(n-1))),
 		[sum(@view data[i:(i+n-1)])/n for i in 1:(length(data)-(n-1))]))
 
-function plot_traj_bayes(param, dt; samples=20)
-	plt = plot(size=(600,800), layout=(2,1))
+function plot_traj_bayes(param, dt; samples=20, labels=true, multi=false,
+			title=false, limits=false)
+	if title
+		pt = (dt.S.use_node) ? "NODE n = " : "ODE n = "
+		pt *= string(dt.S.n)
+		pt *= @sprintf("; loss = %-6.2f",dt.loss_v)		
+	else
+		pt = ""
+	end
+	plt = plot(size=(600,800), layout=(2,1), plot_title=pt)
 	La = dt.L_all
 	ts = La.tsteps
+	hl = labels ? "hare" : ""
+	ll = labels ? "lynx" : ""
+	tl = labels ? "train" : ""
+	ws = multi ? 2 : 3
+	wp = multi ? 0.75 : 1.5
+	tp = 1.5
 	for i in 1:samples 
 		pred = La.predict(param[rand(1:length(param))], La.prob, La.u0)
-		plot!(ts,pred[1,:], color=mma[2], label="", subplot=1)
-		plot!(ts,pred[2,:], color=mma[2], label="", subplot=2)
+		plot!(ts,pred[1,:], color=mma[2], linewidth=wp, label="", subplot=1,
+					ylims=limits ? (-2.4,1.5) : :auto)
+		plot!(ts,pred[2,:], color=mma[2], linewidth=wp, label="", subplot=2,
+					ylims=limits ? (-1.7,0.9) : :auto)
 	end
-	plot!(ts, La.ode_data[1,:], color=mma[1], linewidth=3, label="hare", subplot=1)
-	plot!(ts, La.ode_data[2,:], color=mma[1], linewidth=3, label="lynx", subplot=2)
+	plot!(ts, La.ode_data[1,:], color=mma[1], linewidth=ws, label=hl, subplot=1)
+	plot!(ts, La.ode_data[2,:], color=mma[3], linewidth=ws, label=ll, subplot=2)
 	# add vertical line to show end of training
 	train_end = length(dt.L.tsteps)
 	all_end = length(ts)
 	if all_end > train_end
 		plot!([ts[train_end]], seriestype =:vline, color = :black, linestyle =:dot,
-					linewidth=1.5, label = "train", subplot=1)
+					linewidth=tp, label = tl, subplot=1)
 		plot!([ts[train_end]], seriestype =:vline, color = :black, linestyle =:dot,
-					linewidth=1.5, label = "train", subplot=2)
+					linewidth=tp, label = tl, subplot=2)
 	end
 	display(plt)
+	return(plt)
 end
 
 function plot_loss_bayes(losses; skip_frac=0.0, ks_intervals=10)
