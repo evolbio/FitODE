@@ -139,9 +139,11 @@ for f in files
 				target_labels=("","")))
 end
 plt = plot(plts..., size=(1200,1800), layout=grid(3,2,heights=[2/9,3/9,4/9]),
-		linewidth=3, top_margin=-10mm, bottom_margin=8mm)
+		linewidth=3, top_margin=-10mm, bottom_margin=8mm, left_margin=3mm)
 
 Plots.pdf(plt, "/Users/steve/Desktop/dynamics.pdf")
+
+# Bug in Julia Plots.jl misplaces some of the plot titles, which I fixed by hand
 
 ############################  Plot multiple phase runs  ##########################
 using FitODE_plots, Plots, Measures
@@ -241,3 +243,5 @@ end
 plt = plot(plts..., size=(900,1000), layout=grid(3,2),top_margin=-9mm, bottom_margin=6mm)
 
 Plots.pdf(plt, "/Users/steve/Desktop/bayes.pdf")
+
+# Bug in Julia Plots.jl prints one plot title incorrectly, which I fixed by hand
