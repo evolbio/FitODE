@@ -1,5 +1,5 @@
 module FitODE
-using CSV, DataFrames, Statistics, Interpolations, QuadGK,
+using CSV, DataFrames, Statistics, Interpolations, QuadGK, Printf,
 		DifferentialEquations, JLD2, Parameters, Suppressor, Distributions
 export calc_pred_loss
 
@@ -104,7 +104,7 @@ function load_bayes(file)
 			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
-function calc_pred_loss(samples=30)
+function calc_pred_loss(samples=100)
 	proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
 	train_time = "60";						# e.g., "all", "60", "75", etc
 	train = "train_" * train_time * "/"; 	# directory for training period
@@ -139,9 +139,16 @@ function calc_pred_loss(samples=30)
 					p_init, saveat = La.tsteps, reltol = dt.S.rtolR, abstol = dt.S.atolR)
 	hare_data = ode_data[1,start_idx:end_idx]
 	lynx_data = ode_data[2,start_idx:end_idx]
-	pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))])
-	return sum(abs2,[x[1] for x in pred.u][start_idx:end_idx] .- hare_data)
-	#return pred.u
+	losses = zeros(samples)
+	for i in 1:samples
+		pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))])
+		losses[i] = sum(abs2,[x[1] for x in pred.u][start_idx:end_idx] .- hare_data)
+						+ sum(abs2,[x[2] for x in pred.u][start_idx:end_idx] .- lynx_data)
+	end
+	@printf("%s%s%s", dt.S.use_node ? "NODE" : " ODE", dt.S.n, ": ")
+	@printf("median = %6.2f", median(losses))
+	@printf("; mean = %6.2f\n", mean(losses))
+	return losses
 end
 
 end # module
