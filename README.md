@@ -14,3 +14,5 @@ Directory output/ with all parameters and output data for runs used in manuscrip
 Preprint illustrating what can be done with this code at:
 
   https://arxiv.org/abs/2204.07833
+
+The main code is on the git branch *unifed*. A small piece of code to calculate the loss values of the predicted trajectories for the test period [60,90] in Figure 4 is on the branch *predict_loss*.

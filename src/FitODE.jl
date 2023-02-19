@@ -104,7 +104,7 @@ function load_bayes(file)
 			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
-function calc_pred_loss(samples=1000)
+function calc_pred_loss(samples=1000; ode3_only = false)
 	proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
 	train_time = "60";						# e.g., "all", "60", "75", etc
 	train = "train_" * train_time * "/"; 	# directory for training period
@@ -121,6 +121,7 @@ function calc_pred_loss(samples=1000)
 
 	for ftuple in files
 		dt = load_data(ftuple[1])
+		if ode3_only && (dt.S.n != 3 || dt.S.use_node) continue end
 		bt = load_bayes(ftuple[2])
 		param = bt.parameters
 		La = dt.L_all
