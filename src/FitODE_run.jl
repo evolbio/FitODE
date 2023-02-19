@@ -245,3 +245,16 @@ plt = plot(plts..., size=(900,1000), layout=grid(3,2),top_margin=-9mm, bottom_ma
 Plots.pdf(plt, "/Users/steve/Desktop/bayes.pdf")
 
 # Bug in Julia Plots.jl prints one plot title incorrectly, which I fixed by hand
+
+################ Bayes figure, get loss for bayes prediction period  ###################
+# In figure 4 of manuscript, loss is not reported for the prediction period
+# To calculate loss for prediction period
+# Get data trajectory
+# Get sample of posterior predicted trajectories
+# For each sample trajectory, calculate the loss over the prediction phase
+# Report the median loss over the prediction phase
+
+using FitODE
+
+dtt = calc_pred_loss();
+
