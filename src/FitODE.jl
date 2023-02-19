@@ -1,5 +1,5 @@
 module FitODE
-using CSV, DataFrames, Statistics, Interpolations, QuadGK, Printf,
+using CSV, DataFrames, Statistics, Interpolations, QuadGK, Printf, DiffEqFlux,
 		DifferentialEquations, JLD2, Parameters, Suppressor, Distributions
 export calc_pred_loss
 
@@ -71,7 +71,7 @@ function setup_diffeq_func(S)
 
 	# For NODE, many simple options to build alternative network architecture, see SciML docs
 	if S.use_node
-		dudt = FastChain(FastDense(S.n, S.layer_size, activate), FastDense(S.layer_size, S.n))
+		dudt = Chain(Dense(S.n, S.layer_size, activate), Dense(S.layer_size, S.n))
 		ode! = nothing
 		predict = S.opt_dummy_u0 ?
 			predict_node_dummy :
@@ -119,36 +119,33 @@ function calc_pred_loss(samples=100)
 	start_idx = 121							# for timestep 60
 	end_idx = 181							# for timestep 90
 
-# 	for ftuple in files
-# 		dt = load_data(ftuple[1])
-# 		bt = load_bayes(ftuple[2])
-# 		param = bt.parameters
-# 	end
-	dt = load_data(files[1][1])
-	bt = load_bayes(files[1][2])
-	param = bt.parameters
-	La = dt.L_all
-	ode_data, u0, tspan, _, _ = read_data(dt.S)
-	dudt, ode!, _ = setup_diffeq_func(dt.S)
-	tsteps = La.tsteps
-	if !dt.S.use_node p_init = 0.1*rand(dt.S.nsqr + dt.S.n) end
-	prob = dt.S.use_node ?
-		NeuralODE(dudt, tspan, Rodas4P(), saveat = La.tsteps, 
-				reltol = dt.S.rtolR, abstol = dt.S.atolR) :
-		ODEProblem((du, u, p, t) -> ode!(du, u, p, t, dt.S.n, dt.S.nsqr), u0, tspan, 
-					p_init, saveat = La.tsteps, reltol = dt.S.rtolR, abstol = dt.S.atolR)
-	hare_data = ode_data[1,start_idx:end_idx]
-	lynx_data = ode_data[2,start_idx:end_idx]
-	losses = zeros(samples)
-	for i in 1:samples
-		pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))])
-		losses[i] = sum(abs2,[x[1] for x in pred.u][start_idx:end_idx] .- hare_data)
-						+ sum(abs2,[x[2] for x in pred.u][start_idx:end_idx] .- lynx_data)
+	for ftuple in files
+		dt = load_data(ftuple[1])
+		bt = load_bayes(ftuple[2])
+		param = bt.parameters
+		La = dt.L_all
+		ode_data, u0, tspan, _, _ = read_data(dt.S)
+		dudt, ode!, _ = setup_diffeq_func(dt.S)
+		tsteps = La.tsteps
+		if !dt.S.use_node p_init = 0.1*rand(dt.S.nsqr + dt.S.n) end
+		prob = dt.S.use_node ?
+			NeuralODE(dudt, tspan, Rodas4P(), saveat = La.tsteps, 
+					reltol = dt.S.rtolR, abstol = dt.S.atolR) :
+			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, dt.S.n, dt.S.nsqr), u0, tspan, 
+						p_init, saveat = La.tsteps, reltol = dt.S.rtolR, abstol = dt.S.atolR)
+		hare_data = ode_data[1,start_idx:end_idx]
+		lynx_data = ode_data[2,start_idx:end_idx]
+		losses = zeros(samples)
+		for i in 1:samples
+			pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))])
+			losses[i] = sum(abs2,[x[1] for x in pred.u][start_idx:end_idx] .- hare_data)
+							+ sum(abs2,[x[2] for x in pred.u][start_idx:end_idx] .- lynx_data)
+		end
+		@printf("%s%s%s", dt.S.use_node ? "NODE" : " ODE", dt.S.n, ": ")
+		@printf("median = %6.2f", median(losses))
+		@printf("; mean = %6.2f\n", mean(losses))
 	end
-	@printf("%s%s%s", dt.S.use_node ? "NODE" : " ODE", dt.S.n, ": ")
-	@printf("median = %6.2f", median(losses))
-	@printf("; mean = %6.2f\n", mean(losses))
-	return losses
+	return
 end
 
 end # module
