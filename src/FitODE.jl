@@ -1,5 +1,5 @@
 module FitODE
-using CSV, DataFrames, Statistics, Interpolations, QuadGK, Printf, DiffEqFlux,
+using CSV, DataFrames, Statistics, Interpolations, QuadGK, Printf, Flux,
 		DifferentialEquations, JLD2, Parameters, Suppressor, Distributions
 export calc_pred_loss
 
@@ -104,7 +104,7 @@ function load_bayes(file)
 			ks = bt["ks"], ks_times = bt["ks_times"])
 end
 
-function calc_pred_loss(samples=100)
+function calc_pred_loss(samples=1000)
 	proj_output = "/Users/steve/sim/zzOtherLang/julia/projects/FitODE/output/";
 	train_time = "60";						# e.g., "all", "60", "75", etc
 	train = "train_" * train_time * "/"; 	# directory for training period
@@ -127,23 +127,28 @@ function calc_pred_loss(samples=100)
 		ode_data, u0, tspan, _, _ = read_data(dt.S)
 		dudt, ode!, _ = setup_diffeq_func(dt.S)
 		tsteps = La.tsteps
-		if !dt.S.use_node p_init = 0.1*rand(dt.S.nsqr + dt.S.n) end
-		prob = dt.S.use_node ?
-			NeuralODE(dudt, tspan, Rodas4P(), saveat = La.tsteps, 
-					reltol = dt.S.rtolR, abstol = dt.S.atolR) :
-			ODEProblem((du, u, p, t) -> ode!(du, u, p, t, dt.S.n, dt.S.nsqr), u0, tspan, 
-						p_init, saveat = La.tsteps, reltol = dt.S.rtolR, abstol = dt.S.atolR)
+		p_init = 0.1*rand(dt.S.nsqr + dt.S.n)
+		if dt.S.use_node
+			p, re = Flux.destructure(dudt)
+			node(u, p, t) = re(p)(u)
+			prob = ODEProblem(node, Float32.(u0), Float32.(tspan), Float32.(p_init))
+		else
+			prob = ODEProblem((du, u, p, t) -> ode!(du, u, p, t, dt.S.n, dt.S.nsqr),
+						u0, tspan, p_init)
+		end
 		hare_data = ode_data[1,start_idx:end_idx]
 		lynx_data = ode_data[2,start_idx:end_idx]
 		losses = zeros(samples)
 		for i in 1:samples
-			pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))])
+			pred = solve(prob, Rodas4P(), p=param[rand(1:length(param))], saveat = La.tsteps, 
+							reltol = dt.S.rtolR, abstol = dt.S.atolR)
 			losses[i] = sum(abs2,[x[1] for x in pred.u][start_idx:end_idx] .- hare_data)
 							+ sum(abs2,[x[2] for x in pred.u][start_idx:end_idx] .- lynx_data)
 		end
 		@printf("%s%s%s", dt.S.use_node ? "NODE" : " ODE", dt.S.n, ": ")
-		@printf("median = %6.2f", median(losses))
-		@printf("; mean = %6.2f\n", mean(losses))
+		@printf("median = %5.3e", median(losses))
+		@printf("; mean = %5.3e", mean(losses))
+		@printf("; sd = %5.3e\n", std(losses))
 	end
 	return
 end
